@@ -4,10 +4,14 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
+extern crate carina;
+extern crate sce;
+
 use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
 mod gamma;
+mod multimodal;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("indus")
@@ -38,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
     pretty_env_logger::init_timed();
 
-    if let Some(sub_m) = matches.subcommand_matches("stats") {
+    if let Some(sub_m) = matches.subcommand_matches("gamma") {
         gamma::callback(&sub_m)?
     }
 

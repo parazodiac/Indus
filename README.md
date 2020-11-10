@@ -1,6 +1,4 @@
-# <img src="indus.png" width="40" height="40" /> Indus
-
-
+# <img src="indus.png" width="30" height="30" /> Indus [![Coverage Status](https://coveralls.io/repos/github/parazodiac/Indus/badge.svg?branch=main)](https://coveralls.io/github/parazodiac/Indus?branch=main) ![Rust](https://github.com/k3yavi/SingleCellExperiment/workflows/Rust/badge.svg)
 
 Footnotes:
 ----------

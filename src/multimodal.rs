@@ -28,10 +28,9 @@ impl MultiModalExperiment<f32> {
     pub fn from_paths(paths: Vec<PathBuf>) -> MultiModalExperiment<f32> {
         let mut matrices: Vec<sce::SingleCellExperiment<f32>> = Vec::new();
         for path in paths {
-            let experiment = sce::SingleCellExperiment::from_alevin(
-                path
-            ).expect("error reading the input matrix");
-    
+            let experiment = sce::SingleCellExperiment::from_alevin(path)
+                .expect("error reading the input matrix");
+
             info!("{:?}", experiment);
             matrices.push(experiment);
         }

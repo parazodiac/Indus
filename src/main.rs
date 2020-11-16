@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate csv;
 extern crate pretty_env_logger;
 
 #[macro_use]
@@ -11,6 +12,7 @@ use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
 mod gamma;
+mod links;
 mod multimodal;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -29,6 +31,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .required(true)
                         .multiple(true)
                         .help("path to the parent folders of matrices."),
+                )
+                .arg(
+                    Arg::with_name("links")
+                        .long("links")
+                        .short("l")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the file with feature links."),
                 )
                 .arg(
                     Arg::with_name("output")

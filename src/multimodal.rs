@@ -1,42 +1,63 @@
 use sce::SingleCellExperiment;
+use std::fmt;
 use std::path::PathBuf;
 
 pub struct MultiModalExperiment<T> {
-    matrices: Vec<SingleCellExperiment<T>>,
+    assays: Vec<SingleCellExperiment<T>>,
     pivot: usize,
+}
+
+impl<T> fmt::Debug for MultiModalExperiment<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MultiModalExperiment: {} modalitles\n", self.len())?;
+        for (index, exp) in self.assays().into_iter().enumerate() {
+            write!(f, "Modality {} Shape: {:?}\n", index, exp.shape())?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<T> MultiModalExperiment<T> {
     pub fn get_experiment(&self, index: usize) -> Option<&SingleCellExperiment<T>> {
-        self.matrices.get(index)
+        self.assays.get(index)
     }
 
-    pub fn num_modalities(&self) -> usize {
-        self.matrices.len()
+    pub fn len(&self) -> usize {
+        self.assays.len()
     }
 
-    pub fn matrices(&self) -> &Vec<SingleCellExperiment<T>> {
-        &self.matrices
+    pub fn assays(&self) -> &Vec<SingleCellExperiment<T>> {
+        &self.assays
     }
 
     pub fn pivot(&self) -> usize {
         self.pivot
     }
+
+    pub fn features(&self) -> Vec<&Vec<String>> {
+        let mut features = Vec::new();
+        for assay in &self.assays {
+            features.push(assay.row_names());
+        }
+
+        features
+    }
 }
 
 impl MultiModalExperiment<f32> {
     pub fn from_paths(paths: Vec<PathBuf>) -> MultiModalExperiment<f32> {
-        let mut matrices: Vec<sce::SingleCellExperiment<f32>> = Vec::new();
+        let mut assays: Vec<sce::SingleCellExperiment<f32>> = Vec::new();
         for path in paths {
-            let experiment = sce::SingleCellExperiment::from_alevin(path)
+            let experiment = sce::SingleCellExperiment::from_tenx_v2(path)
                 .expect("error reading the input matrix");
 
             info!("{:?}", experiment);
-            matrices.push(experiment);
+            assays.push(experiment);
         }
 
         MultiModalExperiment {
-            matrices: matrices,
+            assays: assays,
             pivot: 0,
         }
     }

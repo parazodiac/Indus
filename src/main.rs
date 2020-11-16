@@ -12,6 +12,7 @@ use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
 mod gamma;
+mod gibbs;
 mod links;
 mod multimodal;
 

@@ -2,6 +2,7 @@ use clap::ArgMatches;
 use std::error::Error;
 
 use crate::carina;
+use crate::gibbs;
 use crate::links;
 use crate::multimodal;
 
@@ -15,6 +16,9 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     let olap_path = carina::file::file_path_from_clap(sub_m, "links")?;
     let links_obj = links::Links::new(&mm_obj, olap_path);
     println!("{:?}", links_obj);
+
+    let regions = links_obj.extract_iqr()?;
+    println!("Found total {:?} regions", regions.len());
 
     Ok(())
 }

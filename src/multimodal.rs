@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 pub struct MultiModalExperiment<T> {
     assays: Vec<SingleCellExperiment<T>>,
-    pivot: usize,
+    _pivot: usize,
 }
 
 impl<T> fmt::Debug for MultiModalExperiment<T> {
@@ -19,7 +19,7 @@ impl<T> fmt::Debug for MultiModalExperiment<T> {
 }
 
 impl<T> MultiModalExperiment<T> {
-    pub fn get_experiment(&self, index: usize) -> Option<&SingleCellExperiment<T>> {
+    pub fn _get_experiment(&self, index: usize) -> Option<&SingleCellExperiment<T>> {
         self.assays.get(index)
     }
 
@@ -31,14 +31,14 @@ impl<T> MultiModalExperiment<T> {
         &self.assays
     }
 
-    pub fn pivot(&self) -> usize {
-        self.pivot
+    pub fn _pivot(&self) -> usize {
+        self._pivot
     }
 
     pub fn features(&self) -> Vec<&Vec<String>> {
         let mut features = Vec::new();
         for assay in &self.assays {
-            features.push(assay.row_names());
+            features.push(assay.col_names());
         }
 
         features
@@ -58,7 +58,7 @@ impl MultiModalExperiment<f32> {
 
         MultiModalExperiment {
             assays: assays,
-            pivot: 0,
+            _pivot: 0,
         }
     }
 }

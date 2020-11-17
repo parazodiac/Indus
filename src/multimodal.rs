@@ -1,7 +1,7 @@
-use sce::SingleCellExperiment;
-use std::fmt;
 use rand::Rng;
+use sce::SingleCellExperiment;
 use std::error::Error;
+use std::fmt;
 use std::path::PathBuf;
 
 pub struct MultiModalExperiment<T> {
@@ -49,6 +49,14 @@ impl<T> MultiModalExperiment<T> {
 
         features
     }
+
+    pub fn get_feature_string(&self, is_pivot: bool, index: usize) -> &str {
+        let assay = match is_pivot {
+            true => &self.assays()[1],
+            false => &self.assays()[0],
+        };
+        &assay.col_names()[index]
+    }
 }
 
 impl MultiModalExperiment<f32> {
@@ -69,14 +77,14 @@ impl MultiModalExperiment<f32> {
     }
 
     pub fn choose_feature(
-        &self, 
-        features: &Vec<usize>, 
-        coin_val: f32, 
+        &self,
+        features: &Vec<usize>,
+        coin_val: f32,
         cell_id: usize,
-        is_pivot_assay: bool
+        is_pivot_assay: bool,
     ) -> Result<usize, Box<dyn Error>> {
         if features.len() == 1 {
-            return Ok(0)
+            return Ok(features[0]);
         }
 
         assert!(coin_val < 1.0 && coin_val >= 0.0, "wrong coin toss value");
@@ -85,14 +93,15 @@ impl MultiModalExperiment<f32> {
             false => self.get_experiment(0).unwrap().counts(),
         };
 
-        let mut stats: Vec<f32> = features.iter().map(|&feature| {
-            *mat.get(cell_id, feature).unwrap_or(&0.0)
-        }).collect();
+        let mut stats: Vec<f32> = features
+            .iter()
+            .map(|&feature| *mat.get(cell_id, feature).unwrap_or(&0.0))
+            .collect();
 
         let norm: f32 = stats.iter().sum();
         if norm == 0.0 {
             let mut rng = rand::thread_rng();
-            return Ok(rng.gen_range(0, features.len()));
+            return Ok(features[rng.gen_range(0, features.len())]);
         }
 
         let mut cum_sum_iter = stats.iter_mut().scan(0.0_f32, |cusum, x| {
@@ -101,6 +110,39 @@ impl MultiModalExperiment<f32> {
         });
 
         let chosen_index = cum_sum_iter.position(|x| x > coin_val).unwrap();
-        Ok(chosen_index)
+        Ok(features[chosen_index])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::multimodal::MultiModalExperiment;
+    use std::path::Path;
+
+    #[test]
+    fn test_mmexp() {
+        let ppath = Path::new("test/pivot");
+        let spath = Path::new("test/sec");
+        let mm_obj =
+            MultiModalExperiment::from_paths(vec![spath.to_path_buf(), ppath.to_path_buf()]);
+
+        assert_eq!(mm_obj.get_feature_string(true, 0), "FAM138A");
+        assert_eq!(mm_obj.num_cells(), 5);
+        assert_eq!(mm_obj.len(), 2);
+        assert_eq!(mm_obj._pivot(), 0);
+
+        assert_eq!(
+            *mm_obj.features()[0],
+            vec![
+                "chr1-10126-10439",
+                "chr1-180794-181148",
+                "chr1-181394-181705",
+                "chr1-191396-192016",
+                "chr1-267971-268188",
+                "chr1-280584-280784",
+                "chr1-629918-630126",
+                "chr1-633995-634215"
+            ]
+        );
     }
 }

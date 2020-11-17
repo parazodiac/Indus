@@ -6,6 +6,7 @@ use std::fmt;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 
+#[derive(PartialEq)]
 pub struct IQRegions {
     groups: Vec<Vec<usize>>,
 }
@@ -69,18 +70,25 @@ impl<'a, T> Links<'a, T> {
                     record.into_iter().flat_map(str::parse::<String>).collect();
                 assert_eq!(values.len(), 2);
 
+                // todo handle cases when value not in the input matrix
                 let sec_index = *feature_string_to_index[0].get(&values[0]).unwrap();
                 let pivot_index = *feature_string_to_index[1].get(&values[1]).unwrap();
-                
-                to_pivot.entry(sec_index).or_insert(Vec::new()).push(pivot_index);
-                from_pivot.entry(pivot_index).or_insert(Vec::new()).push(sec_index);
+
+                to_pivot
+                    .entry(sec_index)
+                    .or_insert(Vec::new())
+                    .push(pivot_index);
+                from_pivot
+                    .entry(pivot_index)
+                    .or_insert(Vec::new())
+                    .push(sec_index);
             }
         } // end populating maps
 
         Links {
             _mm_obj: mm_obj,
-           from_pivot,
-           to_pivot
+            from_pivot,
+            to_pivot,
         }
     }
 
@@ -92,16 +100,20 @@ impl<'a, T> Links<'a, T> {
         self.from_pivot.keys().into_iter().map(|x| *x).collect()
     }
 
+    pub fn _get_sec_features(&self) -> HashSet<usize> {
+        self.to_pivot.keys().into_iter().map(|x| *x).collect()
+    }
+
     pub fn get_to_pivot_hits(&self, query: &Vec<usize>) -> Vec<usize> {
         let mut all_hits = Vec::new();
         for elem in query {
             let mut elem_hits = self.to_pivot.get(&elem).unwrap().clone();
             all_hits.append(&mut elem_hits);
         }
-        
-       all_hits.sort();
-       all_hits.dedup();
-       all_hits
+
+        all_hits.sort();
+        all_hits.dedup();
+        all_hits
     }
 
     pub fn get_from_pivot_hits(&self, query: &Vec<usize>) -> Vec<usize> {
@@ -110,17 +122,17 @@ impl<'a, T> Links<'a, T> {
             let mut elem_hits = self.from_pivot.get(&elem).unwrap().clone();
             all_hits.append(&mut elem_hits);
         }
-        
-       all_hits.sort();
-       all_hits.dedup();
-       all_hits
+
+        all_hits.sort();
+        all_hits.dedup();
+        all_hits
     }
 
-    pub fn entry_to_pivot(&self, query: usize) -> &Vec<usize>{
+    pub fn entry_to_pivot(&self, query: usize) -> &Vec<usize> {
         self.to_pivot.get(&query).unwrap()
     }
 
-    pub fn entry_from_pivot(&self, query: usize) -> &Vec<usize>{
+    pub fn entry_from_pivot(&self, query: usize) -> &Vec<usize> {
         self.from_pivot.get(&query).unwrap()
     }
 
@@ -140,9 +152,7 @@ impl<'a, T> Links<'a, T> {
         Ok(IQRegions { groups })
     }
 
-    fn extract_region(
-        &self, seed: usize,
-    ) -> Vec<usize> {
+    fn extract_region(&self, seed: usize) -> Vec<usize> {
         let mut pivot_hits = vec![seed];
         let mut num_pivot_hits = 1;
         let mut num_sec_hits = 0;
@@ -170,5 +180,48 @@ impl<'a, T> Links<'a, T> {
         }
 
         pivot_hits
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
+    use std::path::Path;
+
+    use crate::links::IQRegions;
+    use crate::links::Links;
+    use crate::multimodal::MultiModalExperiment;
+
+    #[test]
+    fn test_links() {
+        let ppath = Path::new("test/pivot");
+        let spath = Path::new("test/sec");
+        let mm_obj =
+            MultiModalExperiment::from_paths(vec![spath.to_path_buf(), ppath.to_path_buf()]);
+
+        let opath = Path::new("test/olaps.tsv");
+        let links_obj = Links::new(&mm_obj, opath.to_path_buf());
+
+        assert_eq!(links_obj.len(), 4);
+        assert_eq!(
+            links_obj.get_pivot_features(),
+            HashSet::from_iter(vec![0, 1, 2, 3])
+        );
+        assert_eq!(
+            links_obj._get_sec_features(),
+            HashSet::from_iter(vec![6, 2, 1, 7, 3, 5, 4, 0])
+        );
+        assert_eq!(links_obj.entry_to_pivot(7), &vec![3, 1]);
+        assert_eq!(links_obj.entry_from_pivot(1), &vec![0, 7]);
+        assert_eq!(links_obj.get_to_pivot_hits(&vec![0, 3]), vec![0, 1, 2]);
+        assert_eq!(links_obj.get_from_pivot_hits(&vec![0, 3]), vec![0, 6, 7]);
+        assert_eq!(links_obj.extract_region(0), vec![0, 1, 3]);
+        assert_eq!(
+            links_obj.extract_iqr().unwrap(),
+            IQRegions {
+                groups: vec![vec![0, 1, 3], vec![2]]
+            }
+        );
     }
 }

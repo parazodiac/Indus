@@ -12,11 +12,11 @@ extern crate sce;
 use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
-mod unify;
+mod configs;
 mod gibbs;
 mod links;
-mod configs;
 mod multimodal;
+mod unify;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("indus")

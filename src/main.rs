@@ -1,5 +1,6 @@
 extern crate clap;
 extern crate csv;
+extern crate indicatif;
 extern crate pretty_env_logger;
 
 #[macro_use]

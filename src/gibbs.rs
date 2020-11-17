@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 
+use indicatif::ProgressBar;
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 
@@ -30,8 +31,6 @@ impl Gamma {
             }
             let state = State::new(mat_index, self.num_rows, self.num_cols);
 
-            println!("{:?}", self);
-            println!("{}\t{}\t{}", mat_index, state.sec, state.pivot);
             write!(
                 ofile,
                 "{}\t{}\t{}\n",
@@ -66,7 +65,7 @@ impl State {
             };
         }
 
-        let pindex = index % num_secs;
+        let pindex = index % num_pivots;
         let sindex = index / num_pivots;
         State {
             sec: sindex,
@@ -115,8 +114,6 @@ pub fn process_region(
 
             let chosen_hit = mm_obj.choose_feature(sec_hits, coin_toss_value, cell_id, false)?;
             state.sec = sec_feats.iter().position(|&x| x == chosen_hit).unwrap();
-
-            debug!("Sec{:?}", sec_hits);
         }
 
         {
@@ -128,8 +125,6 @@ pub fn process_region(
 
             let chosen_hit = mm_obj.choose_feature(pivot_hits, coin_toss_value, cell_id, true)?;
             state.pivot = pivot_feats.iter().position(|&x| x == chosen_hit).unwrap();
-
-            debug!("Pivot{:?}", pivot_hits);
         }
 
         stats[state.row_major_index(num_pivot_feats)] += 1;
@@ -148,12 +143,20 @@ pub fn callback(
     regions: links::IQRegions,
     mut ofile: BufWriter<File>,
 ) -> Result<(), Box<dyn Error>> {
+
+    let num_regions = regions.len();
+    let bar = ProgressBar::new(num_regions as u64);
+
     for pivot_feats in regions.groups() {
+        // progress bar increment
+        bar.inc(1);
+        
         let sec_feats = links_obj.get_from_pivot_hits(&pivot_feats);
         let gamma = process_region(&sec_feats, &pivot_feats, &links_obj, &mm_obj)?;
         gamma.write(&mut ofile, mm_obj, &sec_feats, pivot_feats)?;
     }
 
+    bar.finish();
     Ok(())
 }
 
@@ -167,8 +170,8 @@ mod tests {
 
     #[test]
     fn test_state() {
-        let state = gibbs::State::new(7, 3, 3);
-        assert_eq!(state, gibbs::State { sec: 2, pivot: 1 });
+        let state = gibbs::State::new(45, 9, 20);
+        assert_eq!(state, gibbs::State { sec: 2, pivot: 5 });
     }
 
     #[test]

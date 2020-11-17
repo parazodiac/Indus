@@ -19,6 +19,10 @@ impl IQRegions {
     pub fn groups(&self) -> &Vec<Vec<usize>> {
         &self.groups
     }
+
+    pub fn _sort(&mut self) {
+        self.groups.sort();
+    }
 }
 
 impl fmt::Debug for IQRegions {
@@ -218,10 +222,10 @@ mod tests {
         assert_eq!(links_obj.get_from_pivot_hits(&vec![0, 3]), vec![0, 6, 7]);
         assert_eq!(links_obj.extract_region(0), vec![0, 1, 3]);
         assert_eq!(
-            links_obj.extract_iqr().unwrap(),
+            links_obj.extract_iqr().unwrap()._sort(),
             IQRegions {
                 groups: vec![vec![0, 1, 3], vec![2]]
-            }
+            }._sort()
         );
     }
 }

@@ -6,14 +6,16 @@ extern crate pretty_env_logger;
 extern crate log;
 
 extern crate carina;
+extern crate rand;
 extern crate sce;
 
 use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
-mod gamma;
+mod unify;
 mod gibbs;
 mod links;
+mod configs;
 mod multimodal;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -54,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init_timed();
 
     if let Some(sub_m) = matches.subcommand_matches("gamma") {
-        gamma::callback(&sub_m)?
+        unify::callback(&sub_m)?
     }
 
     Ok(())

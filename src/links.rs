@@ -54,9 +54,96 @@ impl<'a, T> fmt::Debug for Links<'a, T> {
 }
 
 impl<'a, T> Links<'a, T> {
+    pub fn new(mm_obj: &multimodal::MultiModalExperiment<T>, links_file_path: PathBuf) -> Links<T> {
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(b'\t')
+            .from_path(links_file_path)
+            .expect("can't read the links file");
+
+        let (to_pivot, from_pivot) = Links::get_links(&mut rdr, &mm_obj);
+        Links {
+            _mm_obj: mm_obj,
+            from_pivot,
+            to_pivot,
+            microclusters: None,
+            anchors: None,
+        }
+    }
+
+    pub fn new_with_microclusters(
+        mm_obj: &multimodal::MultiModalExperiment<T>,
+        links_file_path: PathBuf,
+        microclusters_file_path: PathBuf,
+    ) -> Links<T> {
+        let mut links = Links::new(&mm_obj, links_file_path);
+
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(b'\t')
+            .from_path(microclusters_file_path)
+            .expect("can't read the microcluster file");
+
+        let clusters = Links::get_microclusters(&mut rdr, &mm_obj);
+        links.set_microclusters(clusters);
+
+        links
+    }
+
+    pub fn new_with_anchors(
+        mm_obj: &multimodal::MultiModalExperiment<T>,
+        links_file_path: PathBuf,
+        anchors_file_path: PathBuf,
+    ) -> Links<T> {
+        let mut links = Links::new(&mm_obj, links_file_path);
+
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(b'\t')
+            .from_path(anchors_file_path)
+            .expect("can't read the microcluster file");
+
+        let clusters = Links::get_anchors(&mut rdr, &mm_obj);
+        links.set_anchors(clusters);
+
+        links
+    }
+
+    fn get_anchors(
+        rdr: &mut csv::Reader<std::fs::File>,
+        mm_obj: &multimodal::MultiModalExperiment<T>,
+    ) -> HashMap<usize, Vec<usize>> {
+        let mut anchors = HashMap::<usize, Vec<usize>>::new();
+        {
+            let all_cells = mm_obj.cells();
+            let mut cells_string_to_index = HashMap::<String, usize>::new();
+            for (index, cell_string) in all_cells.into_iter().enumerate() {
+                cells_string_to_index.insert(cell_string.to_owned(), index);
+            }
+
+            for line in rdr.records() {
+                let record = line.unwrap();
+                let values: Vec<String> =
+                    record.into_iter().flat_map(str::parse::<String>).collect();
+                assert_eq!(values.len(), 2);
+
+                // todo handle cases when value not in the input matrix
+                let sec_cb_index = *cells_string_to_index.get(&values[0]).unwrap();
+                let pivot_cb_index = *cells_string_to_index.get(&values[1]).unwrap();
+
+                anchors
+                    .entry(pivot_cb_index)
+                    .or_insert(Vec::new())
+                    .push(sec_cb_index);
+            }
+        } // end populating maps
+
+        anchors
+    }
+
     fn get_microclusters(
         rdr: &mut csv::Reader<std::fs::File>,
-        mm_obj: &multimodal::MultiModalExperiment<T>
+        mm_obj: &multimodal::MultiModalExperiment<T>,
     ) -> HashMap<String, Vec<usize>> {
         let mut clusters = HashMap::<String, Vec<usize>>::new();
         {
@@ -76,10 +163,7 @@ impl<'a, T> Links<'a, T> {
                 let cb_index = *cells_string_to_index.get(&values[0]).unwrap();
                 let cl_id = values[1].clone();
 
-                clusters
-                    .entry(cl_id)
-                    .or_insert(Vec::new())
-                    .push(cb_index);
+                clusters.entry(cl_id).or_insert(Vec::new()).push(cb_index);
             }
         } // end populating maps
 
@@ -88,8 +172,8 @@ impl<'a, T> Links<'a, T> {
 
     fn get_links(
         rdr: &mut csv::Reader<std::fs::File>,
-        mm_obj: &multimodal::MultiModalExperiment<T>
-    ) -> (HashMap::<usize, Vec<usize>>, HashMap::<usize, Vec<usize>>) {
+        mm_obj: &multimodal::MultiModalExperiment<T>,
+    ) -> (HashMap<usize, Vec<usize>>, HashMap<usize, Vec<usize>>) {
         let mut to_pivot = HashMap::<usize, Vec<usize>>::new();
         let mut from_pivot = HashMap::<usize, Vec<usize>>::new();
         {
@@ -127,47 +211,12 @@ impl<'a, T> Links<'a, T> {
         (to_pivot, from_pivot)
     }
 
-    pub fn new(
-        mm_obj: &multimodal::MultiModalExperiment<T>, 
-        links_file_path: PathBuf,
-    ) -> Links<T> {
-        let mut rdr = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .delimiter(b'\t')
-            .from_path(links_file_path)
-            .expect("can't read the links file");
-
-        let (to_pivot, from_pivot) = Links::get_links(&mut rdr, &mm_obj);
-        Links {
-            _mm_obj: mm_obj,
-            from_pivot,
-            to_pivot,
-            microclusters: None,
-            anchors: None,
-        }
-    }
-
-    pub fn new_with_microclusters(
-        mm_obj: &multimodal::MultiModalExperiment<T>, 
-        links_file_path: PathBuf,
-        microclusters_file_path: PathBuf,
-    ) -> Links<T> {
-        let mut links = Links::new(&mm_obj, links_file_path);
-
-        let mut rdr = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .delimiter(b'\t')
-            .from_path(microclusters_file_path)
-            .expect("can't read the microcluster file");
-        
-        let clusters = Links::get_microclusters(&mut rdr, &mm_obj);
-        links.set_microclusters(clusters);
-
-        links
-    }
-
     pub fn set_microclusters(&mut self, clusters: HashMap<String, Vec<usize>>) {
         self.microclusters = Some(clusters);
+    }
+
+    pub fn set_anchors(&mut self, anchors: HashMap<usize, Vec<usize>>) {
+        self.anchors = Some(anchors);
     }
 
     pub fn len(&self) -> usize {

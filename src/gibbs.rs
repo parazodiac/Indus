@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 
@@ -100,6 +100,9 @@ pub fn process_region(
         pivot: pivot_dist.sample(&mut rng),
     };
 
+    let pivot_mat = mm_obj.get_dense_submatrix(None, pivot_feats, true);
+    let sec_mat = mm_obj.get_dense_submatrix(None, sec_feats, false);
+
     let mut stats = vec![0_u32; num_sec_feats * num_pivot_feats];
     for _ in 0..crate::configs::NUM_SAMPLES {
         // sample a cell
@@ -111,9 +114,11 @@ pub fn process_region(
 
             let pivot_feat = pivot_feats[state.pivot];
             let sec_hits = links_obj.entry_from_pivot(pivot_feat);
+            let sec_indices: Vec<usize> = sec_hits.into_iter()
+                .map(|x| sec_feats.iter().position(|y| y == x).unwrap())
+                .collect();
 
-            let chosen_hit = mm_obj.choose_feature(sec_hits, coin_toss_value, cell_id, false)?;
-            state.sec = sec_feats.iter().position(|&x| x == chosen_hit).unwrap();
+            state.sec = mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id, false)?;
         }
 
         {
@@ -122,9 +127,11 @@ pub fn process_region(
 
             let sec_feat = sec_feats[state.sec];
             let pivot_hits = links_obj.entry_to_pivot(sec_feat);
+            let pivot_indices: Vec<usize> = pivot_hits.into_iter()
+                .map(|x| pivot_feats.iter().position(|y| y == x).unwrap())
+                .collect();
 
-            let chosen_hit = mm_obj.choose_feature(pivot_hits, coin_toss_value, cell_id, true)?;
-            state.pivot = pivot_feats.iter().position(|&x| x == chosen_hit).unwrap();
+            state.pivot = mm_obj.choose_feature(&pivot_mat, &pivot_indices, coin_toss_value, cell_id, true)?;
         }
 
         stats[state.row_major_index(num_pivot_feats)] += 1;
@@ -143,20 +150,26 @@ pub fn callback(
     regions: links::IQRegions,
     mut ofile: BufWriter<File>,
 ) -> Result<(), Box<dyn Error>> {
-
     let num_regions = regions.len();
-    let bar = ProgressBar::new(num_regions as u64);
+    let pbar = ProgressBar::new(num_regions as u64);
+    pbar.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+            )
+            .progress_chars("╢▌▌░╟"),
+    );
 
     for pivot_feats in regions.groups() {
         // progress bar increment
-        bar.inc(1);
-        
+        pbar.inc(1);
+
         let sec_feats = links_obj.get_from_pivot_hits(&pivot_feats);
         let gamma = process_region(&sec_feats, &pivot_feats, &links_obj, &mm_obj)?;
         gamma.write(&mut ofile, mm_obj, &sec_feats, pivot_feats)?;
     }
 
-    bar.finish();
+    pbar.finish();
     Ok(())
 }
 

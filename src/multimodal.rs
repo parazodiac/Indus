@@ -76,26 +76,59 @@ impl MultiModalExperiment<f32> {
         }
     }
 
+    pub fn get_dense_submatrix(
+        &self,
+        cells: Option<&Vec<usize>>,
+        features: &Vec<usize>,
+        is_pivot: bool,
+    ) -> Vec<Vec<f32>> {
+        let full_spmat = match is_pivot {
+            true => self.get_experiment(1).unwrap().counts(),
+            false => self.get_experiment(0).unwrap().counts(),
+        };
+
+        let cells = match cells {
+            Some(cells) => cells.clone(),
+            None => {
+                let cells: Vec<usize> = (0..self.num_cells()).collect();
+                cells
+            }
+        };
+
+        let num_feats = full_spmat.cols();
+        let mut mat = vec![vec![0.0_f32; features.len()]; cells.len()];
+        for (r_idx, cell) in cells.iter().enumerate() {
+            for (c_idx, feature) in features.iter().enumerate() {
+                assert!(*cell < self.num_cells() && *feature < num_feats);
+                mat[r_idx][c_idx] = *full_spmat.get(*cell, *feature).unwrap_or(&0.0);
+            }
+        }
+
+        mat
+    }
+
     pub fn choose_feature(
         &self,
+        mat: &Vec<Vec<f32>>,
         features: &Vec<usize>,
         coin_val: f32,
         cell_id: usize,
-        is_pivot_assay: bool,
+        _is_pivot: bool,
     ) -> Result<usize, Box<dyn Error>> {
         if features.len() == 1 {
             return Ok(features[0]);
         }
 
         assert!(coin_val < 1.0 && coin_val >= 0.0, "wrong coin toss value");
-        let mat = match is_pivot_assay {
-            true => self.get_experiment(1).unwrap().counts(),
-            false => self.get_experiment(0).unwrap().counts(),
-        };
+        //let mat = match is_pivot {
+        //    true => self.get_experiment(1).unwrap().counts(),
+        //    false => self.get_experiment(0).unwrap().counts(),
+        //};
 
         let mut stats: Vec<f32> = features
             .iter()
-            .map(|&feature| *mat.get(cell_id, feature).unwrap_or(&0.0))
+            //.map(|&feature| *mat.get(cell_id, feature).unwrap_or(&0.0))
+            .map(|&feature| mat[cell_id][feature])
             .collect();
 
         let norm: f32 = stats.iter().sum();
@@ -118,6 +151,17 @@ impl MultiModalExperiment<f32> {
 mod tests {
     use crate::multimodal::MultiModalExperiment;
     use std::path::Path;
+
+    #[test]
+    fn test_submatrix() {
+        let ppath = Path::new("test/pivot");
+        let spath = Path::new("test/sec");
+        let mm_obj =
+            MultiModalExperiment::from_paths(vec![spath.to_path_buf(), ppath.to_path_buf()]);
+        
+        let sub_mat = mm_obj.get_dense_submatrix(Some(&vec![0, 2, 4]), &vec![0, 3], true);
+        assert_eq!(sub_mat, vec![vec![1.0, 0.0], vec![1.0, 8.0], vec![0.0, 1.0]]);
+    }
 
     #[test]
     fn test_mmexp() {

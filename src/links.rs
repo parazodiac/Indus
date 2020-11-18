@@ -225,7 +225,8 @@ mod tests {
             links_obj.extract_iqr().unwrap()._sort(),
             IQRegions {
                 groups: vec![vec![0, 1, 3], vec![2]]
-            }._sort()
+            }
+            ._sort()
         );
     }
 }

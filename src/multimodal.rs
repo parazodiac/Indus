@@ -131,6 +131,7 @@ impl MultiModalExperiment<f32> {
             .map(|&feature| mat[cell_id][feature])
             .collect();
 
+        // println!("{:?}", stats);
         let norm: f32 = stats.iter().sum();
         if norm == 0.0 {
             let mut rng = rand::thread_rng();
@@ -158,9 +159,12 @@ mod tests {
         let spath = Path::new("test/sec");
         let mm_obj =
             MultiModalExperiment::from_paths(vec![spath.to_path_buf(), ppath.to_path_buf()]);
-        
+
         let sub_mat = mm_obj.get_dense_submatrix(Some(&vec![0, 2, 4]), &vec![0, 3], true);
-        assert_eq!(sub_mat, vec![vec![1.0, 0.0], vec![1.0, 8.0], vec![0.0, 1.0]]);
+        assert_eq!(
+            sub_mat,
+            vec![vec![1.0, 0.0], vec![1.0, 8.0], vec![0.0, 1.0]]
+        );
     }
 
     #[test]

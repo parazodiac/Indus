@@ -25,6 +25,7 @@ impl Gamma {
         sec_feats: &Vec<usize>,
         pivot_feats: &Vec<usize>,
     ) -> Result<(), Box<dyn Error>> {
+        let norm: u32 = self.stats.iter().sum();
         for (mat_index, val) in self.stats.iter().enumerate() {
             if *val == 0 {
                 continue;
@@ -33,13 +34,18 @@ impl Gamma {
 
             write!(
                 ofile,
-                "{}\t{}\t{}\n",
+                "{}\t{}\t{}\t{}\n",
                 mm_obj.get_feature_string(false, sec_feats[state.sec]),
                 mm_obj.get_feature_string(true, pivot_feats[state.pivot]),
-                val
+                val,
+                *val as f32 / norm as f32
             )?;
         }
         Ok(())
+    }
+
+    pub fn _stats(&self) -> &Vec<u32> {
+        &self.stats
     }
 }
 
@@ -81,11 +87,10 @@ impl State {
 pub fn process_region(
     sec_feats: &Vec<usize>,
     pivot_feats: &Vec<usize>,
+    num_samples: usize,
     links_obj: &links::Links<f32>,
     mm_obj: &multimodal::MultiModalExperiment<f32>,
 ) -> Result<Gamma, Box<dyn Error>> {
-    //let sec_matrix = mm_obj.get_dense_submatrix(0, &sec_feats);
-    //let pivot_matrix = mm_obj.get_dense_submatrix(1, &pivot_feats);
     let num_cells = mm_obj.num_cells();
     let num_sec_feats = sec_feats.len();
     let num_pivot_feats = pivot_feats.len();
@@ -104,7 +109,7 @@ pub fn process_region(
     let sec_mat = mm_obj.get_dense_submatrix(None, sec_feats, false);
 
     let mut stats = vec![0_u32; num_sec_feats * num_pivot_feats];
-    for _ in 0..crate::configs::NUM_SAMPLES {
+    for _ in 0..num_samples {
         // sample a cell
         let cell_id = cells_dist.sample(&mut rng);
 
@@ -114,11 +119,14 @@ pub fn process_region(
 
             let pivot_feat = pivot_feats[state.pivot];
             let sec_hits = links_obj.entry_from_pivot(pivot_feat);
-            let sec_indices: Vec<usize> = sec_hits.into_iter()
+            let sec_indices: Vec<usize> = sec_hits
+                .into_iter()
                 .map(|x| sec_feats.iter().position(|y| y == x).unwrap())
                 .collect();
 
-            state.sec = mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id, false)?;
+            state.sec =
+                mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id, false)?;
+            // println!("Sec {:?}", state.sec);
         }
 
         {
@@ -127,11 +135,19 @@ pub fn process_region(
 
             let sec_feat = sec_feats[state.sec];
             let pivot_hits = links_obj.entry_to_pivot(sec_feat);
-            let pivot_indices: Vec<usize> = pivot_hits.into_iter()
+            let pivot_indices: Vec<usize> = pivot_hits
+                .into_iter()
                 .map(|x| pivot_feats.iter().position(|y| y == x).unwrap())
                 .collect();
 
-            state.pivot = mm_obj.choose_feature(&pivot_mat, &pivot_indices, coin_toss_value, cell_id, true)?;
+            state.pivot = mm_obj.choose_feature(
+                &pivot_mat,
+                &pivot_indices,
+                coin_toss_value,
+                cell_id,
+                true,
+            )?;
+            // println!("Pivot {:?}", state.pivot);
         }
 
         stats[state.row_major_index(num_pivot_feats)] += 1;
@@ -165,7 +181,13 @@ pub fn callback(
         pbar.inc(1);
 
         let sec_feats = links_obj.get_from_pivot_hits(&pivot_feats);
-        let gamma = process_region(&sec_feats, &pivot_feats, &links_obj, &mm_obj)?;
+        let gamma = process_region(
+            &sec_feats,
+            &pivot_feats,
+            crate::configs::NUM_SAMPLES,
+            &links_obj,
+            &mm_obj,
+        )?;
         gamma.write(&mut ofile, mm_obj, &sec_feats, pivot_feats)?;
     }
 
@@ -197,13 +219,21 @@ mod tests {
         let opath = Path::new("test/olaps.tsv");
         let links_obj = Links::new(&mm_obj, opath.to_path_buf());
 
-        let pivot_feats = vec![0, 1, 3];
+        let pivot_feats = vec![2];
         let sec_feats = links_obj.get_from_pivot_hits(&pivot_feats);
-        assert_eq!(sec_feats, vec![0, 6, 7]);
+        assert_eq!(sec_feats, vec![1, 2, 3, 4, 5]);
 
-        let gamma = gibbs::process_region(&sec_feats, &pivot_feats, &links_obj, &mm_obj).unwrap();
-        println!("gamma: {:?}", gamma);
+        let gamma =
+            gibbs::process_region(&sec_feats, &pivot_feats, 1_000, &links_obj, &mm_obj).unwrap();
+        let norm: u32 = gamma._stats().clone().iter().sum();
 
-        assert_eq!(0, 1);
+        let precision = 1;
+        let probs: Vec<String> = gamma
+            ._stats()
+            .into_iter()
+            .map(|&x| format!("{:.1$}", x as f32 / norm as f32, precision))
+            .collect();
+
+        assert_eq!(probs, ["0.2", "0.2", "0.6", "0.0", "0.0"]);
     }
 }

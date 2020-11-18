@@ -7,6 +7,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 
+use crossbeam::queue::ArrayQueue;
+use std::sync::{mpsc, Arc};
+
 use crate::links;
 use crate::multimodal;
 
@@ -25,7 +28,7 @@ impl Gamma {
         sec_feats: &Vec<usize>,
         pivot_feats: &Vec<usize>,
     ) -> Result<(), Box<dyn Error>> {
-        let norm: u32 = self.stats.iter().sum();
+        let _norm: u32 = self.stats.iter().sum();
         for (mat_index, val) in self.stats.iter().enumerate() {
             if *val == 0 {
                 continue;
@@ -34,11 +37,11 @@ impl Gamma {
 
             write!(
                 ofile,
-                "{}\t{}\t{}\t{}\n",
+                "{}\t{}\t{}\n",
                 mm_obj.get_feature_string(false, sec_feats[state.sec]),
                 mm_obj.get_feature_string(true, pivot_feats[state.pivot]),
                 val,
-                *val as f32 / norm as f32
+                //*val as f32 / norm as f32
             )?;
         }
         Ok(())
@@ -124,9 +127,7 @@ pub fn process_region(
                 .map(|x| sec_feats.iter().position(|y| y == x).unwrap())
                 .collect();
 
-            state.sec =
-                mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id, false)?;
-            // println!("Sec {:?}", state.sec);
+            state.sec = mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id)?;
         }
 
         {
@@ -140,14 +141,8 @@ pub fn process_region(
                 .map(|x| pivot_feats.iter().position(|y| y == x).unwrap())
                 .collect();
 
-            state.pivot = mm_obj.choose_feature(
-                &pivot_mat,
-                &pivot_indices,
-                coin_toss_value,
-                cell_id,
-                true,
-            )?;
-            // println!("Pivot {:?}", state.pivot);
+            state.pivot =
+                mm_obj.choose_feature(&pivot_mat, &pivot_indices, coin_toss_value, cell_id)?;
         }
 
         stats[state.row_major_index(num_pivot_feats)] += 1;
@@ -171,25 +166,81 @@ pub fn callback(
     pbar.set_style(
         ProgressStyle::default_bar()
             .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+                "{spinner:.red} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
             )
             .progress_chars("╢▌▌░╟"),
     );
 
-    for pivot_feats in regions.groups() {
-        // progress bar increment
-        pbar.inc(1);
+    let num_threads = 10;
+    let q = Arc::new(ArrayQueue::<usize>::new(num_regions));
+    (0..num_regions).for_each(|x| q.push(x).unwrap());
 
-        let sec_feats = links_obj.get_from_pivot_hits(&pivot_feats);
-        let gamma = process_region(
-            &sec_feats,
-            &pivot_feats,
-            crate::configs::NUM_SAMPLES,
-            &links_obj,
-            &mm_obj,
-        )?;
-        gamma.write(&mut ofile, mm_obj, &sec_feats, pivot_feats)?;
-    }
+    let (tx, rx) = mpsc::sync_channel(num_threads);
+    let regions = Arc::new(regions);
+    let links_obj = Arc::new(links_obj);
+
+    crossbeam::scope(|scope| {
+        for _worker in 0..num_threads {
+            let tx = tx.clone();
+            let reader = Arc::clone(&q);
+            let arc_regions = Arc::clone(&regions);
+            let arc_links_obj = Arc::clone(&links_obj);
+
+            scope.spawn(move |_| loop {
+                match reader.pop() {
+                    Some(index) => {
+                        let pivot_feats = arc_regions.get(index);
+                        let sec_feats = arc_links_obj.get_from_pivot_hits(&pivot_feats);
+                        let gamma = process_region(
+                            &sec_feats,
+                            &pivot_feats,
+                            crate::configs::NUM_SAMPLES,
+                            &arc_links_obj,
+                            &mm_obj,
+                        )
+                        .expect("can't process gamma region");
+                        tx.send(Some((gamma, sec_feats, pivot_feats)))
+                            .expect("Could not send mid data!");
+                    }
+                    None => {
+                        tx.send(None).expect("Could not send end data!");
+                        break;
+                    }
+                }
+            });
+        }
+
+        let mut dead_thread_count = 0;
+        for out_data in rx.iter() {
+            match out_data {
+                Some((gamma, sec_feats, pivot_feats)) => {
+                    pbar.inc(1);
+                    gamma
+                        .write(&mut ofile, mm_obj, &sec_feats, &pivot_feats)
+                        .expect("can't write gamma");
+                } // end-Some
+                None => {
+                    dead_thread_count += 1;
+                    if dead_thread_count == num_threads {
+                        drop(tx);
+
+                        // consume what's remaining
+                        for out_data in rx.iter() {
+                            pbar.inc(1);
+                            out_data.map_or((), |(gamma, sec_feats, pivot_feats)| {
+                                gamma
+                                    .write(&mut ofile, mm_obj, &sec_feats, &pivot_feats)
+                                    .expect("can't write gamma");
+                            });
+                        }
+
+                        break;
+                    }// end if
+                } // end-None
+            } // end-match
+        } // end-for
+    })
+    .unwrap(); //end crossbeam
 
     pbar.finish();
     Ok(())

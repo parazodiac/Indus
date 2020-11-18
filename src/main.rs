@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate crossbeam;
 extern crate csv;
 extern crate indicatif;
 extern crate pretty_env_logger;
@@ -43,6 +44,20 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .takes_value(true)
                         .required(true)
                         .help("path to the file with feature links."),
+                )
+                .arg(
+                    Arg::with_name("anchors")
+                        .long("anchors")
+                        .short("a")
+                        .takes_value(true)
+                        .help("path to the file with cellular barcode anchors."),
+                )
+                .arg(
+                    Arg::with_name("microclusters")
+                        .long("microclusters")
+                        .short("m")
+                        .takes_value(true)
+                        .help("path to the file with microclusters of pivot assay."),
                 )
                 .arg(
                     Arg::with_name("output")

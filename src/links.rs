@@ -23,6 +23,10 @@ impl IQRegions {
     pub fn _sort(&mut self) {
         self.groups.sort();
     }
+
+    pub fn get(&self, index: usize) -> Vec<usize> {
+        self.groups()[index].clone()
+    }
 }
 
 impl fmt::Debug for IQRegions {

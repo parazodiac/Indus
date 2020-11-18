@@ -113,25 +113,17 @@ impl MultiModalExperiment<f32> {
         features: &Vec<usize>,
         coin_val: f32,
         cell_id: usize,
-        _is_pivot: bool,
     ) -> Result<usize, Box<dyn Error>> {
         if features.len() == 1 {
             return Ok(features[0]);
         }
 
         assert!(coin_val < 1.0 && coin_val >= 0.0, "wrong coin toss value");
-        //let mat = match is_pivot {
-        //    true => self.get_experiment(1).unwrap().counts(),
-        //    false => self.get_experiment(0).unwrap().counts(),
-        //};
-
         let mut stats: Vec<f32> = features
             .iter()
-            //.map(|&feature| *mat.get(cell_id, feature).unwrap_or(&0.0))
             .map(|&feature| mat[cell_id][feature])
             .collect();
 
-        // println!("{:?}", stats);
         let norm: f32 = stats.iter().sum();
         if norm == 0.0 {
             let mut rng = rand::thread_rng();

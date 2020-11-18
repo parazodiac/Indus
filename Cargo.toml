@@ -11,6 +11,7 @@ csv = "1.1.4"
 log = "0.4.11"
 rand = "0.7.3"
 clap = "2.33.3"
+crossbeam = "0.8.0"
 indicatif = "0.15.0"
 pretty_env_logger = "0.4.0"
 

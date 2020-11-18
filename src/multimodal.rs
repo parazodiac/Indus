@@ -50,6 +50,10 @@ impl<T> MultiModalExperiment<T> {
         features
     }
 
+    pub fn cells(&self) -> &Vec<String> {
+        self.get_experiment(0).unwrap().row_names()
+    }
+
     pub fn get_feature_string(&self, is_pivot: bool, index: usize) -> &str {
         let assay = match is_pivot {
             true => &self.assays()[1],

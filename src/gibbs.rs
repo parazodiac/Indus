@@ -235,7 +235,7 @@ pub fn callback(
                         }
 
                         break;
-                    }// end if
+                    } // end if
                 } // end-None
             } // end-match
         } // end-for

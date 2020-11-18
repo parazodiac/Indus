@@ -224,16 +224,16 @@ mod tests {
         assert_eq!(sec_feats, vec![1, 2, 3, 4, 5]);
 
         let gamma =
-            gibbs::process_region(&sec_feats, &pivot_feats, 1_000, &links_obj, &mm_obj).unwrap();
+            gibbs::process_region(&sec_feats, &pivot_feats, 100_000, &links_obj, &mm_obj).unwrap();
         let norm: u32 = gamma._stats().clone().iter().sum();
 
-        let precision = 1;
-        let probs: Vec<String> = gamma
+        let exp_gamma = vec![0.223, 0.211, 0.548, 0.018, 0.000];
+        let is_reasonable: bool = gamma
             ._stats()
             .into_iter()
-            .map(|&x| format!("{:.1$}", x as f32 / norm as f32, precision))
-            .collect();
+            .enumerate()
+            .any(|(index, &x)| ((x as f32 / norm as f32) - exp_gamma[index]).abs() > 1e-2);
 
-        assert_eq!(probs, ["0.2", "0.2", "0.6", "0.0", "0.0"]);
+        assert!(!is_reasonable);
     }
 }

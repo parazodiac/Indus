@@ -48,6 +48,13 @@ pub struct Links<'a, T> {
 impl<'a, T> fmt::Debug for Links<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Found total {} Linked pivot features", self.len())?;
+        if let Some(microclusters) = &self.microclusters {
+            write!(f, "\nFound total {} micorclusters", microclusters.len())?;
+        }
+
+        if let Some(anchors) = &self.anchors {
+            write!(f, "\nFound total {} pivot anchors", anchors.len())?;
+        }
 
         Ok(())
     }
@@ -213,6 +220,14 @@ impl<'a, T> Links<'a, T> {
 
     pub fn set_microclusters(&mut self, clusters: HashMap<String, Vec<usize>>) {
         self.microclusters = Some(clusters);
+    }
+
+    pub fn has_microclusters(&self) -> bool {
+        self.microclusters.is_some()
+    }
+
+    pub fn microcluster(&self) -> Option<&HashMap<std::string::String, std::vec::Vec<usize>>> {
+        self.microclusters.as_ref()
     }
 
     pub fn set_anchors(&mut self, anchors: HashMap<usize, Vec<usize>>) {

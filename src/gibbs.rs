@@ -93,8 +93,13 @@ pub fn process_region(
     num_samples: usize,
     links_obj: &links::Links<f32>,
     mm_obj: &multimodal::MultiModalExperiment<f32>,
+    cells: Option<&Vec<usize>>,
 ) -> Result<Gamma, Box<dyn Error>> {
-    let num_cells = mm_obj.num_cells();
+    let num_cells = match cells {
+        Some(cells) => cells.len(),
+        None => mm_obj.num_cells(),
+    };
+    
     let num_sec_feats = sec_feats.len();
     let num_pivot_feats = pivot_feats.len();
 
@@ -114,7 +119,10 @@ pub fn process_region(
     let mut stats = vec![0_u32; num_sec_feats * num_pivot_feats];
     for _ in 0..num_samples {
         // sample a cell
-        let cell_id = cells_dist.sample(&mut rng);
+        let cell_id = match cells.is_some() {
+            true => cells.unwrap()[cells_dist.sample(&mut rng)],
+            false => cells_dist.sample(&mut rng),
+        };
 
         {
             // sample from sec
@@ -157,9 +165,10 @@ pub fn process_region(
 
 pub fn callback(
     mm_obj: &multimodal::MultiModalExperiment<f32>,
-    links_obj: links::Links<f32>,
-    regions: links::IQRegions,
+    links_obj: &links::Links<f32>,
+    regions: &links::IQRegions,
     mut ofile: BufWriter<File>,
+    cells: Option<&Vec<usize>>,
 ) -> Result<(), Box<dyn Error>> {
     let num_regions = regions.len();
     let pbar = ProgressBar::new(num_regions as u64);
@@ -176,27 +185,23 @@ pub fn callback(
     (0..num_regions).for_each(|x| q.push(x).unwrap());
 
     let (tx, rx) = mpsc::sync_channel(num_threads);
-    let regions = Arc::new(regions);
-    let links_obj = Arc::new(links_obj);
-
     crossbeam::scope(|scope| {
         for _worker in 0..num_threads {
             let tx = tx.clone();
             let reader = Arc::clone(&q);
-            let arc_regions = Arc::clone(&regions);
-            let arc_links_obj = Arc::clone(&links_obj);
 
             scope.spawn(move |_| loop {
                 match reader.pop() {
                     Some(index) => {
-                        let pivot_feats = arc_regions.get(index);
-                        let sec_feats = arc_links_obj.get_from_pivot_hits(&pivot_feats);
+                        let pivot_feats = regions.get(index);
+                        let sec_feats = links_obj.get_from_pivot_hits(&pivot_feats);
                         let gamma = process_region(
                             &sec_feats,
                             &pivot_feats,
                             crate::configs::NUM_SAMPLES,
-                            &arc_links_obj,
+                            &links_obj,
                             &mm_obj,
+                            cells,
                         )
                         .expect("can't process gamma region");
                         tx.send(Some((gamma, sec_feats, pivot_feats)))
@@ -275,7 +280,7 @@ mod tests {
         assert_eq!(sec_feats, vec![1, 2, 3, 4, 5]);
 
         let gamma =
-            gibbs::process_region(&sec_feats, &pivot_feats, 100_000, &links_obj, &mm_obj).unwrap();
+            gibbs::process_region(&sec_feats, &pivot_feats, 100_000, &links_obj, &mm_obj, None).unwrap();
         let norm: u32 = gamma._stats().clone().iter().sum();
 
         let exp_gamma = vec![0.223, 0.211, 0.548, 0.018, 0.000];

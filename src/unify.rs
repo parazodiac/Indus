@@ -23,7 +23,6 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
             None => links::Links::new(&mm_obj, olap_path),
         },
     };
-
     info!("{:?}", links_obj);
 
     info!("Finding Independantly quantifiable regions");
@@ -31,8 +30,19 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     info!("Found total {:?} regions", regions.len());
 
     info!("Starting gibbs sampling");
-    let ofile = carina::file::bufwriter_from_clap(sub_m, "output")?;
-    gibbs::callback(&mm_obj, links_obj, regions, ofile)?;
+    match links_obj.has_microclusters() {
+        false => {
+            let ofile = carina::file::bufwriter_from_clap(sub_m, "output")?;
+            gibbs::callback(&mm_obj, &links_obj, &regions, ofile, None)?;
+        },
+        true => {
+            for (key, value) in links_obj.microcluster().unwrap() {
+                info!("Working on microcluster {}", key);
+                let ofile = carina::file::bufwriter_from_clap_with_suffix(sub_m, "output", key)?;
+                gibbs::callback(&mm_obj, &links_obj, &regions, ofile, Some(value))?;
+            }
+        },
+    }
 
     info!("All done");
     Ok(())

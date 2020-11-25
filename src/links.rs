@@ -42,7 +42,7 @@ pub struct Links<'a, T> {
     to_pivot: HashMap<usize, Vec<usize>>,
     from_pivot: HashMap<usize, Vec<usize>>,
     microclusters: Option<HashMap<String, Vec<usize>>>,
-    anchors: Option<HashMap<usize, Vec<usize>>>,
+    anchors: Option<HashMap<usize, (Vec<usize>, Vec<f32>)>>,
 }
 
 impl<'a, T> fmt::Debug for Links<'a, T> {
@@ -119,8 +119,8 @@ impl<'a, T> Links<'a, T> {
     fn get_anchors(
         rdr: &mut csv::Reader<std::fs::File>,
         mm_obj: &multimodal::MultiModalExperiment<T>,
-    ) -> HashMap<usize, Vec<usize>> {
-        let mut anchors = HashMap::<usize, Vec<usize>>::new();
+    ) -> HashMap<usize, (Vec<usize>, Vec<f32>)> {
+        let mut anchors = HashMap::<usize, (Vec<usize>, Vec<f32>)>::new();
         {
             let all_cells = mm_obj.cells();
             let mut cells_string_to_index = HashMap::<String, usize>::new();
@@ -137,11 +137,13 @@ impl<'a, T> Links<'a, T> {
                 // todo handle cases when value not in the input matrix
                 let sec_cb_index = *cells_string_to_index.get(&values[0]).unwrap();
                 let pivot_cb_index = *cells_string_to_index.get(&values[1]).unwrap();
+                let probability = values[2].parse::<f32>().unwrap();
 
-                anchors
-                    .entry(pivot_cb_index)
-                    .or_insert(Vec::new())
-                    .push(sec_cb_index);
+                let val = anchors
+                    .entry(sec_cb_index)
+                    .or_insert((Vec::new(), Vec::new()));
+                val.0.push(pivot_cb_index);
+                val.1.push(probability);
             }
         } // end populating maps
 
@@ -226,16 +228,40 @@ impl<'a, T> Links<'a, T> {
         self.microclusters.is_some()
     }
 
+    pub fn has_anchors(&self) -> bool {
+        self.anchors.is_some()
+    }
+
+    pub fn get_anchor(&self, cell_id: usize) -> Option<&(Vec<usize>, Vec<f32>)> {
+        match &self.anchors {
+            Some(anchors) => anchors.get(&cell_id),
+            None => None,
+        }
+    }
+
     pub fn microcluster(&self) -> Option<&HashMap<std::string::String, std::vec::Vec<usize>>> {
         self.microclusters.as_ref()
     }
 
-    pub fn set_anchors(&mut self, anchors: HashMap<usize, Vec<usize>>) {
+    pub fn set_anchors(&mut self, anchors: HashMap<usize, (Vec<usize>, Vec<f32>)>) {
         self.anchors = Some(anchors);
     }
 
     pub fn len(&self) -> usize {
         self.from_pivot.len()
+    }
+
+    pub fn jump_cell_id(&self, sec_cell_id: usize, coin_val: f32) -> usize {
+        match self.has_anchors() {
+            false => sec_cell_id,
+            true => match self.get_anchor(sec_cell_id) {
+                None => unreachable!(),
+                Some((cell_ids, probs)) => {
+                    let chosen_index = probs.iter().position(|&x| x > coin_val).unwrap();
+                    cell_ids[chosen_index]
+                }
+            },
+        }
     }
 
     pub fn get_pivot_features(&self) -> HashSet<usize> {

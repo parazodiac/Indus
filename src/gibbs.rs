@@ -27,6 +27,7 @@ impl Gamma {
         mm_obj: &multimodal::MultiModalExperiment<f32>,
         sec_feats: &Vec<usize>,
         pivot_feats: &Vec<usize>,
+        region_id: usize,
     ) -> Result<(), Box<dyn Error>> {
         let _norm: u32 = self.stats.iter().sum();
         for (mat_index, val) in self.stats.iter().enumerate() {
@@ -37,10 +38,11 @@ impl Gamma {
 
             write!(
                 ofile,
-                "{}\t{}\t{}\n",
+                "{}\t{}\t{}\t{}\n",
                 mm_obj.get_feature_string(false, sec_feats[state.sec]),
                 mm_obj.get_feature_string(true, pivot_feats[state.pivot]),
                 val,
+                region_id,
                 //*val as f32 / norm as f32
             )?;
         }
@@ -99,7 +101,7 @@ pub fn process_region(
         Some(cells) => cells.len(),
         None => mm_obj.num_cells(),
     };
-    
+
     let num_sec_feats = sec_feats.len();
     let num_pivot_feats = pivot_feats.len();
 
@@ -113,16 +115,18 @@ pub fn process_region(
         pivot: pivot_dist.sample(&mut rng),
     };
 
-    let pivot_mat = mm_obj.get_dense_submatrix(None, pivot_feats, true);
-    let sec_mat = mm_obj.get_dense_submatrix(None, sec_feats, false);
+    let pivot_mat = mm_obj.get_dense_submatrix(cells, pivot_feats, true);
+    let sec_mat = mm_obj.get_dense_submatrix(cells, sec_feats, false);
 
     let mut stats = vec![0_u32; num_sec_feats * num_pivot_feats];
     for _ in 0..num_samples {
         // sample a cell
-        let cell_id = match cells.is_some() {
-            true => cells.unwrap()[cells_dist.sample(&mut rng)],
-            false => cells_dist.sample(&mut rng),
-        };
+        // looking for cell id in the submatrix
+        let cell_id_sec = cells_dist.sample(&mut rng);
+        // match cells.is_some() {
+        //     true => cells.unwrap()[cells_dist.sample(&mut rng)],
+        //     false => cells_dist.sample(&mut rng),
+        // };
 
         {
             // sample from sec
@@ -135,13 +139,21 @@ pub fn process_region(
                 .map(|x| sec_feats.iter().position(|y| y == x).unwrap())
                 .collect();
 
-            state.sec = mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id)?;
+            state.sec =
+                mm_obj.choose_feature(&sec_mat, &sec_indices, coin_toss_value, cell_id_sec)?;
         }
 
         {
+            // sample from the anchors
+            let coin_toss_value: f32 = rng.gen_range(0.0, 1.0);
+            let pivot_cell = links_obj.jump_cell_id(cell_id_sec, coin_toss_value);
+            let pivot_cell_sub_matrix = match cells {
+                Some(cells) => cells.iter().position(|&x| x == pivot_cell).unwrap(),
+                None => pivot_cell,
+            };
+
             // sample from pivot
             let coin_toss_value: f32 = rng.gen_range(0.0, 1.0);
-
             let sec_feat = sec_feats[state.sec];
             let pivot_hits = links_obj.entry_to_pivot(sec_feat);
             let pivot_indices: Vec<usize> = pivot_hits
@@ -149,8 +161,12 @@ pub fn process_region(
                 .map(|x| pivot_feats.iter().position(|y| y == x).unwrap())
                 .collect();
 
-            state.pivot =
-                mm_obj.choose_feature(&pivot_mat, &pivot_indices, coin_toss_value, cell_id)?;
+            state.pivot = mm_obj.choose_feature(
+                &pivot_mat,
+                &pivot_indices,
+                coin_toss_value,
+                pivot_cell_sub_matrix,
+            )?;
         }
 
         stats[state.row_major_index(num_pivot_feats)] += 1;
@@ -215,13 +231,15 @@ pub fn callback(
             });
         }
 
+        let mut num_regions = 0;
         let mut dead_thread_count = 0;
         for out_data in rx.iter() {
             match out_data {
                 Some((gamma, sec_feats, pivot_feats)) => {
                     pbar.inc(1);
+                    num_regions += 1;
                     gamma
-                        .write(&mut ofile, mm_obj, &sec_feats, &pivot_feats)
+                        .write(&mut ofile, mm_obj, &sec_feats, &pivot_feats, num_regions)
                         .expect("can't write gamma");
                 } // end-Some
                 None => {
@@ -232,9 +250,16 @@ pub fn callback(
                         // consume what's remaining
                         for out_data in rx.iter() {
                             pbar.inc(1);
+                            num_regions += 1;
                             out_data.map_or((), |(gamma, sec_feats, pivot_feats)| {
                                 gamma
-                                    .write(&mut ofile, mm_obj, &sec_feats, &pivot_feats)
+                                    .write(
+                                        &mut ofile,
+                                        mm_obj,
+                                        &sec_feats,
+                                        &pivot_feats,
+                                        num_regions,
+                                    )
                                     .expect("can't write gamma");
                             });
                         }
@@ -280,7 +305,8 @@ mod tests {
         assert_eq!(sec_feats, vec![1, 2, 3, 4, 5]);
 
         let gamma =
-            gibbs::process_region(&sec_feats, &pivot_feats, 100_000, &links_obj, &mm_obj, None).unwrap();
+            gibbs::process_region(&sec_feats, &pivot_feats, 100_000, &links_obj, &mm_obj, None)
+                .unwrap();
         let norm: u32 = gamma._stats().clone().iter().sum();
 
         let exp_gamma = vec![0.223, 0.211, 0.548, 0.018, 0.000];

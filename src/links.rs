@@ -49,11 +49,11 @@ impl<'a, T> fmt::Debug for Links<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Found total {} Linked pivot features", self.len())?;
         if let Some(microclusters) = &self.microclusters {
-            write!(f, "\nFound total {} micorclusters", microclusters.len())?;
+            write!(f, ", {} micorclusters", microclusters.len())?;
         }
 
         if let Some(anchors) = &self.anchors {
-            write!(f, "\nFound total {} pivot anchors", anchors.len())?;
+            write!(f, " & {} pivot anchors", anchors.len())?;
         }
 
         Ok(())
@@ -116,6 +116,36 @@ impl<'a, T> Links<'a, T> {
         links
     }
 
+    pub fn new_with_microclusters_and_anchors(
+        mm_obj: &multimodal::MultiModalExperiment<T>,
+        links_file_path: PathBuf,
+        microclusters_file_path: PathBuf,
+        anchors_file_path: PathBuf,
+    ) -> Links<T> {
+
+        let mut links = Links::new(&mm_obj, links_file_path);
+
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(b'\t')
+            .from_path(microclusters_file_path)
+            .expect("can't read the microcluster file");
+
+        let clusters = Links::get_microclusters(&mut rdr, &mm_obj);
+        links.set_microclusters(clusters);
+
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(b'\t')
+            .from_path(anchors_file_path)
+            .expect("can't read the microcluster file");
+
+        let anchors = Links::get_anchors(&mut rdr, &mm_obj);
+        links.set_anchors(anchors);
+
+        links
+    }
+
     fn get_anchors(
         rdr: &mut csv::Reader<std::fs::File>,
         mm_obj: &multimodal::MultiModalExperiment<T>,
@@ -132,7 +162,7 @@ impl<'a, T> Links<'a, T> {
                 let record = line.unwrap();
                 let values: Vec<String> =
                     record.into_iter().flat_map(str::parse::<String>).collect();
-                assert_eq!(values.len(), 2);
+                assert_eq!(values.len(), 3);
 
                 // todo handle cases when value not in the input matrix
                 let sec_cb_index = *cells_string_to_index.get(&values[0]).unwrap();
@@ -146,6 +176,18 @@ impl<'a, T> Links<'a, T> {
                 val.1.push(probability);
             }
         } // end populating maps
+
+        for (_, val) in anchors.iter_mut() {
+            if val.1.len() == 1 { continue }
+            
+            let norm: f32 = val.1.iter().sum();
+            let cum_sum_iter = val.1.iter_mut().scan(0.0_f32, |cusum, x| {
+                *cusum = *cusum + (*x / norm);
+                Some(*cusum)
+            });
+
+            val.1 = cum_sum_iter.collect();
+        }
 
         anchors
     }
@@ -255,7 +297,7 @@ impl<'a, T> Links<'a, T> {
         match self.has_anchors() {
             false => sec_cell_id,
             true => match self.get_anchor(sec_cell_id) {
-                None => unreachable!(),
+                None => sec_cell_id,
                 Some((cell_ids, probs)) => {
                     let chosen_index = probs.iter().position(|&x| x > coin_val).unwrap();
                     cell_ids[chosen_index]

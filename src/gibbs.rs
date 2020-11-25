@@ -147,9 +147,9 @@ pub fn process_region(
             // sample from the anchors
             let coin_toss_value: f32 = rng.gen_range(0.0, 1.0);
             let pivot_cell = links_obj.jump_cell_id(cell_id_sec, coin_toss_value);
-            let pivot_cell_sub_matrix = match cells {
-                Some(cells) => cells.iter().position(|&x| x == pivot_cell).unwrap(),
-                None => pivot_cell,
+            let pivot_cell_sub_matrix = match links_obj.has_anchors() {
+                true => cells.unwrap().iter().position(|&x| x == pivot_cell).unwrap(),
+                false => pivot_cell,
             };
 
             // sample from pivot

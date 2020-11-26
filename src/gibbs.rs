@@ -29,7 +29,7 @@ impl Gamma {
         pivot_feats: &Vec<usize>,
         region_id: usize,
     ) -> Result<(), Box<dyn Error>> {
-        let _norm: u32 = self.stats.iter().sum();
+        let norm: u32 = self.stats.iter().sum();
         for (mat_index, val) in self.stats.iter().enumerate() {
             if *val == 0 {
                 continue;
@@ -41,9 +41,9 @@ impl Gamma {
                 "{}\t{}\t{}\t{}\n",
                 mm_obj.get_feature_string(false, sec_feats[state.sec]),
                 mm_obj.get_feature_string(true, pivot_feats[state.pivot]),
-                val,
+                //val,
+                *val as f32 / norm as f32,
                 region_id,
-                //*val as f32 / norm as f32
             )?;
         }
         Ok(())
@@ -115,7 +115,8 @@ pub fn process_region(
         pivot: pivot_dist.sample(&mut rng),
     };
 
-    let pivot_mat = mm_obj.get_dense_submatrix(cells, pivot_feats, true);
+    // keeping the full pivot matrix while smaller sec matrix
+    let pivot_mat = mm_obj.get_dense_submatrix(None, pivot_feats, true);
     let sec_mat = mm_obj.get_dense_submatrix(cells, sec_feats, false);
 
     let mut stats = vec![0_u32; num_sec_feats * num_pivot_feats];
@@ -147,10 +148,10 @@ pub fn process_region(
             // sample from the anchors
             let coin_toss_value: f32 = rng.gen_range(0.0, 1.0);
             let pivot_cell = links_obj.jump_cell_id(cell_id_sec, coin_toss_value);
-            let pivot_cell_sub_matrix = match links_obj.has_anchors() {
-                true => cells.unwrap().iter().position(|&x| x == pivot_cell).unwrap(),
-                false => pivot_cell,
-            };
+            // let pivot_cell_sub_matrix = match links_obj.has_anchors() {
+            //     true => cells.unwrap().iter().position(|&x| x == pivot_cell).unwrap(),
+            //     false => pivot_cell,
+            // };
 
             // sample from pivot
             let coin_toss_value: f32 = rng.gen_range(0.0, 1.0);
@@ -165,7 +166,8 @@ pub fn process_region(
                 &pivot_mat,
                 &pivot_indices,
                 coin_toss_value,
-                pivot_cell_sub_matrix,
+                //pivot_cell_sub_matrix,
+                pivot_cell,
             )?;
         }
 

@@ -187,6 +187,7 @@ impl<'a, T> Links<'a, T> {
             });
 
             val.1 = cum_sum_iter.collect();
+            assert!(val.0.len() == val.1.len());
         }
 
         anchors
@@ -299,7 +300,8 @@ impl<'a, T> Links<'a, T> {
             true => match self.get_anchor(sec_cell_id) {
                 None => sec_cell_id,
                 Some((cell_ids, probs)) => {
-                    let chosen_index = probs.iter().position(|&x| x > coin_val).unwrap();
+                    let chosen_index = probs.iter().position(|&x| x > coin_val)
+                        .unwrap_or(probs.len() - 1);
                     cell_ids[chosen_index]
                 }
             },

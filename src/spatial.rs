@@ -16,16 +16,18 @@ pub fn process_row(
     row_sums: &Vec<f32>,
 ) -> Result<f32, Box<dyn Error>> {
     let n = values.cols();
-    let x: Vec<f32> = (0..n).map(|x| {
-        match values.counts().get(row_index, x) {
+    let x: Vec<f32> = (0..n)
+        .map(|x| match values.counts().get(row_index, x) {
             Some(&x) => x,
             None => 0.0,
-        }
-    }).collect();
+        })
+        .collect();
     assert!(x.len() == n);
 
     let x_sum: f32 = x.iter().sum();
-    if x_sum == 0.0 {return Ok(0.0);}
+    if x_sum == 0.0 {
+        return Ok(0.0);
+    }
 
     let x_mean = x_sum as f32 / n as f32;
     let z: Vec<f32> = x.iter().map(|&x| x as f32 - x_mean).collect();
@@ -61,10 +63,18 @@ pub fn process(
             .progress_chars("╢▌▌░╟"),
     );
 
-    let row_sums: Vec<f32> = weights.counts().outer_iterator().map(|x| {
-        let rsum: f32 = x.iter().map(|x| x.1).sum();
-        if rsum == 0.0 { 1.0 } else { rsum }
-    }).collect();
+    let row_sums: Vec<f32> = weights
+        .counts()
+        .outer_iterator()
+        .map(|x| {
+            let rsum: f32 = x.iter().map(|x| x.1).sum();
+            if rsum == 0.0 {
+                1.0
+            } else {
+                rsum
+            }
+        })
+        .collect();
 
     let num_threads = 10;
     let q = Arc::new(ArrayQueue::<usize>::new(num_values));
@@ -81,8 +91,8 @@ pub fn process(
             scope.spawn(move |_| loop {
                 match reader.pop() {
                     Some(index) => {
-                        let stats =
-                            process_row(&weights, &values, index, &row_sums).expect("can't process rows");
+                        let stats = process_row(&weights, &values, index, &row_sums)
+                            .expect("can't process rows");
                         tx.send(Some((index, stats)))
                             .expect("Could not send mid data!");
                     }
@@ -95,11 +105,13 @@ pub fn process(
         }
 
         let mut dead_thread_count = 0;
+        let column_names = values.col_names();
         for out_data in rx.iter() {
             match out_data {
                 Some((index, stats)) => {
                     pbar.inc(1);
-                    write!(ofile, "{}\t{}\n", index, stats).expect("can't write to file");
+                    write!(ofile, "{}\t{}\n", column_names[index], stats)
+                        .expect("can't write to file");
                 } // end-Some
                 None => {
                     dead_thread_count += 1;
@@ -110,7 +122,7 @@ pub fn process(
                         for out_data in rx.iter() {
                             pbar.inc(1);
                             out_data.map_or((), |(index, stats)| {
-                                write!(ofile, "{}\t{}\n", index, stats)
+                                write!(ofile, "{}\t{}\n", column_names[index], stats)
                                     .expect("can't write to file");
                             });
                         }

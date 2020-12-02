@@ -16,15 +16,15 @@ pub fn process_row(
     row_sums: &Vec<f32>,
 ) -> Result<f32, Box<dyn Error>> {
     let n = values.cols();
-    let x: Vec<f32> = (0..n)
-        .map(|x| match values.counts().get(row_index, x) {
-            Some(&x) => x,
-            None => 0.0,
-        })
-        .collect();
-    assert!(x.len() == n);
+    let val_it = values.counts().outer_iterator().nth(row_index).unwrap();
 
-    let x_sum: f32 = x.iter().sum();
+    let mut x_sum = 0.0;
+    let mut x = vec![0.0 as f32; n];
+    for (col_ind, &val) in val_it.iter() {
+        x_sum += val;
+        x[col_ind] = val;
+    }
+
     if x_sum == 0.0 {
         return Ok(0.0);
     }
@@ -35,13 +35,11 @@ pub fn process_row(
 
     let mut w = 0.0;
     let mut cv = 0.0;
-    for i in 0..n {
-        for j in 0..n {
-            if let Some(&wt) = weights.counts().get(i, j) {
-                let norm_wt = wt / row_sums[i];
-                w += norm_wt;
-                cv += norm_wt * (z[i] as f32) * (z[j] as f32);
-            }
+    for (i, row_iter) in weights.counts().outer_iterator().enumerate() {
+        for (j, &wt) in row_iter.iter() {
+            let norm_wt = wt / row_sums[i];
+            w += norm_wt;
+            cv += norm_wt * (z[i] as f32) * (z[j] as f32);
         }
     }
 

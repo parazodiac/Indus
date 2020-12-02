@@ -27,8 +27,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .author("Avi Srivastava")
         .about("Generate summary stats for multimodal data.")
         .subcommand(
-            SubCommand::with_name("moransi")
-                .about("A subcommand to generate Moran's I.")
+            SubCommand::with_name("autocorr")
+                .about("A subcommand to generate auto-correlation summary statistics.")
                 .arg(
                     Arg::with_name("weights")
                         .long("weights")
@@ -44,6 +44,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .takes_value(true)
                         .required(true)
                         .help("path to the value matrix."),
+                )
+                .arg(
+                    Arg::with_name("method")
+                        .long("method")
+                        .short("m")
+                        .takes_value(true)
+                        .required(true)
+                        .possible_values(&["Moransi", "Gearyc"]),
                 )
                 .arg(
                     Arg::with_name("output")
@@ -104,7 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         unify::callback(&sub_m)?
     }
 
-    if let Some(sub_m) = matches.subcommand_matches("moransi") {
+    if let Some(sub_m) = matches.subcommand_matches("autocorr") {
         spatial::callback(&sub_m)?
     }
 

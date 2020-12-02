@@ -9,7 +9,7 @@ use crossbeam::queue::ArrayQueue;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::{mpsc, Arc};
 
-pub fn process_row(
+pub fn get_moransi(
     weights: &sce::SingleCellExperiment<f32>,
     values: &sce::SingleCellExperiment<f32>,
     row_index: usize,
@@ -46,10 +46,50 @@ pub fn process_row(
     Ok((n as f32 / w) * (cv / v))
 }
 
+pub fn get_gearyc(
+    weights: &sce::SingleCellExperiment<f32>,
+    values: &sce::SingleCellExperiment<f32>,
+    row_index: usize,
+    row_sums: &Vec<f32>,
+) -> Result<f32, Box<dyn Error>> {
+    let n = values.cols();
+    let val_it = values.counts().outer_iterator().nth(row_index).unwrap();
+
+    let mut x_sum = 0.0;
+    let mut x = vec![0.0 as f32; n];
+    for (col_ind, &val) in val_it.iter() {
+        x_sum += val;
+        x[col_ind] = val;
+    }
+
+    if x_sum == 0.0 {
+        return Ok(1.0);
+    }
+
+    let x_mean = x_sum as f32 / n as f32;
+    let z: Vec<f32> = x.iter().map(|&x| x as f32 - x_mean).collect();
+    let v: f32 = z.iter().map(|x| x * x).sum();
+
+    let mut w = 0.0;
+    let mut cv = 0.0;
+    for (i, row_iter) in weights.counts().outer_iterator().enumerate() {
+        for (j, &wt) in row_iter.iter() {
+            let norm_wt = wt / row_sums[i];
+            w += norm_wt;
+
+            let x_mult = z[i] as f32 - z[j] as f32;
+            cv += norm_wt * x_mult * x_mult;
+        }
+    }
+
+    Ok(((n as f32-1.0) / (2.0*w)) * (cv / v))
+}
+
 pub fn process(
     weights: &sce::SingleCellExperiment<f32>,
     values: &sce::SingleCellExperiment<f32>,
     mut ofile: BufWriter<File>,
+    is_moransi: bool,
 ) -> Result<(), Box<dyn Error>> {
     let num_values = values.rows();
     let pbar = ProgressBar::new(num_values as u64);
@@ -89,8 +129,10 @@ pub fn process(
             scope.spawn(move |_| loop {
                 match reader.pop() {
                     Some(index) => {
-                        let stats = process_row(&weights, &values, index, &row_sums)
-                            .expect("can't process rows");
+                        let stats = match is_moransi {
+                            true => get_moransi(&weights, &values, index, &row_sums).expect("can't process rows"),
+                            false => get_gearyc(&weights, &values, index, &row_sums).expect("can't process rows"),
+                        };
                         tx.send(Some((index, stats)))
                             .expect("Could not send mid data!");
                     }
@@ -151,9 +193,18 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
     let ofile = carina::file::bufwriter_from_clap(sub_m, "output")?;
 
-    info!("Starting Moran's I");
-    process(&wt_mat, &val_mat, ofile)?;
-
+    match sub_m.value_of("method") {
+        Some("Moransi") => {
+            info!("Starting Moran's I");
+            process(&wt_mat, &val_mat, ofile, true)?;
+        },
+        Some("Gearyc") => {
+            info!("Starting Moran's I");
+            process(&wt_mat, &val_mat, ofile, false)?;
+        },
+        _ => unreachable!(),
+    };
+    
     info!("All done");
     Ok(())
 }

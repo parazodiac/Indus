@@ -18,13 +18,42 @@ mod configs;
 mod gibbs;
 mod links;
 mod multimodal;
+mod spatial;
 mod unify;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("indus")
         .version("0.1.0")
         .author("Avi Srivastava")
-        .about("Generate gamma matrices for multimodal data.")
+        .about("Generate summary stats for multimodal data.")
+        .subcommand(
+            SubCommand::with_name("moransi")
+                .about("A subcommand to generate Moran's I.")
+                .arg(
+                    Arg::with_name("weights")
+                        .long("weights")
+                        .short("w")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the weight matrix."),
+                )
+                .arg(
+                    Arg::with_name("values")
+                        .long("values")
+                        .short("v")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the value matrix."),
+                )
+                .arg(
+                    Arg::with_name("output")
+                        .long("output")
+                        .short("o")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the output file."),
+                ),
+        )
         .subcommand(
             SubCommand::with_name("gamma")
                 .about("A subcommand to generate gamma fields.")
@@ -73,6 +102,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(sub_m) = matches.subcommand_matches("gamma") {
         unify::callback(&sub_m)?
+    }
+
+    if let Some(sub_m) = matches.subcommand_matches("moransi") {
+        spatial::callback(&sub_m)?
     }
 
     Ok(())

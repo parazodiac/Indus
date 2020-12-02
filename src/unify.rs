@@ -18,7 +18,9 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     let olap_path = carina::file::file_path_from_clap(sub_m, "links")?;
     let links_obj = match carina::file::try_file_path_from_clap(sub_m, "microclusters") {
         Some(mpath) => match carina::file::try_file_path_from_clap(sub_m, "anchors") {
-            Some(apath) => links::Links::new_with_microclusters_and_anchors(&mm_obj, olap_path, mpath, apath),
+            Some(apath) => {
+                links::Links::new_with_microclusters_and_anchors(&mm_obj, olap_path, mpath, apath)
+            }
             None => links::Links::new_with_microclusters(&mm_obj, olap_path, mpath),
         },
         None => match carina::file::try_file_path_from_clap(sub_m, "anchors") {

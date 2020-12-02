@@ -122,7 +122,6 @@ impl<'a, T> Links<'a, T> {
         microclusters_file_path: PathBuf,
         anchors_file_path: PathBuf,
     ) -> Links<T> {
-
         let mut links = Links::new(&mm_obj, links_file_path);
 
         let mut rdr = csv::ReaderBuilder::new()
@@ -178,8 +177,10 @@ impl<'a, T> Links<'a, T> {
         } // end populating maps
 
         for (_, val) in anchors.iter_mut() {
-            if val.1.len() == 1 { continue }
-            
+            if val.1.len() == 1 {
+                continue;
+            }
+
             let norm: f32 = val.1.iter().sum();
             let cum_sum_iter = val.1.iter_mut().scan(0.0_f32, |cusum, x| {
                 *cusum = *cusum + (*x / norm);
@@ -300,7 +301,9 @@ impl<'a, T> Links<'a, T> {
             true => match self.get_anchor(sec_cell_id) {
                 None => sec_cell_id,
                 Some((cell_ids, probs)) => {
-                    let chosen_index = probs.iter().position(|&x| x > coin_val)
+                    let chosen_index = probs
+                        .iter()
+                        .position(|&x| x > coin_val)
                         .unwrap_or(probs.len() - 1);
                     cell_ids[chosen_index]
                 }

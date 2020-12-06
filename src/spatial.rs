@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 
 use clap::ArgMatches;
 use sce;
@@ -82,7 +83,7 @@ pub fn get_gearyc(
         }
     }
 
-    Ok(((n as f32-1.0) / (2.0*w)) * (cv / v))
+    Ok(((n as f32 - 1.0) / (2.0 * w)) * (cv / v))
 }
 
 pub fn process(
@@ -130,8 +131,10 @@ pub fn process(
                 match reader.pop() {
                     Some(index) => {
                         let stats = match is_moransi {
-                            true => get_moransi(&weights, &values, index, &row_sums).expect("can't process rows"),
-                            false => get_gearyc(&weights, &values, index, &row_sums).expect("can't process rows"),
+                            true => get_moransi(&weights, &values, index, &row_sums)
+                                .expect("can't process rows"),
+                            false => get_gearyc(&weights, &values, index, &row_sums)
+                                .expect("can't process rows"),
                         };
                         tx.send(Some((index, stats)))
                             .expect("Could not send mid data!");
@@ -179,10 +182,12 @@ pub fn process(
     Ok(())
 }
 
-pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
-    let weights_file_path = carina::file::file_path_from_clap(sub_m, "weights")?;
-    let values_file_path = carina::file::file_path_from_clap(sub_m, "values")?;
-
+pub fn generate_stats(
+    weights_file_path: PathBuf,
+    values_file_path: PathBuf,
+    ofile: BufWriter<File>,
+    method: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
     let wt_mat: sce::SingleCellExperiment<f32> =
         sce::SingleCellExperiment::from_tenx_v2(weights_file_path)?;
     println!("Weights: {:?}", wt_mat);
@@ -191,20 +196,33 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         sce::SingleCellExperiment::from_tenx_v2(values_file_path)?;
     println!("Values: {:?}", val_mat);
 
-    let ofile = carina::file::bufwriter_from_clap(sub_m, "output")?;
-
-    match sub_m.value_of("method") {
+    match method {
         Some("Moransi") => {
             info!("Starting Moran's I");
             process(&wt_mat, &val_mat, ofile, true)?;
-        },
+        }
         Some("Gearyc") => {
             info!("Starting Moran's I");
             process(&wt_mat, &val_mat, ofile, false)?;
-        },
+        }
         _ => unreachable!(),
     };
-    
+
+    Ok(())
+}
+
+pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
+    let weights_file_path = carina::file::file_path_from_clap(sub_m, "weights")?;
+    let values_file_path = carina::file::file_path_from_clap(sub_m, "values")?;
+    let ofile = carina::file::bufwriter_from_clap(sub_m, "output")?;
+
+    generate_stats(
+        weights_file_path,
+        values_file_path,
+        ofile,
+        sub_m.value_of("method"),
+    )?;
+
     info!("All done");
     Ok(())
 }

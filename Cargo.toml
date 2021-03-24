@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 csv = "1.1.5"
 log = "0.4.11"
-rand = "0.7.3"
+rand = "0.8.2"
 clap = "2.33.3"
 crossbeam = "0.8.0"
 indicatif = "0.15.0"

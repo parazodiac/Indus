@@ -8,7 +8,7 @@ pub struct Records<T> {
 
 impl Records<u32> {
     pub fn from_string(data: String) -> Records<u32> {
-        let (mut start, mut end) = (0, std::u32::MAX);
+        let (mut start, mut end) = (0, 0);
         let mut cb: &str = "chr0";
         for (index, text) in data.split_whitespace().enumerate() {
             match index {

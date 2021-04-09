@@ -1,26 +1,49 @@
-extern crate clap;
-extern crate crossbeam;
-extern crate csv;
-extern crate indicatif;
-extern crate pretty_env_logger;
-
 #[macro_use]
 extern crate log;
-
-extern crate carina;
-extern crate rand;
-extern crate sce;
 
 use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
+mod fragment;
+mod records;
 mod spatial;
+mod hmm;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("indus")
         .version("0.1.0")
         .author("Avi Srivastava")
         .about("Generate summary stats for multimodal data.")
+        .subcommand(
+            SubCommand::with_name("hmm")
+                .about("A subcommand to run hmm.")
+                .arg(
+                    Arg::with_name("fragments")
+                        .long("fragments")
+                        .short("f")
+                        .takes_value(true)
+                        .required(true)
+                        .multiple(true)
+                        .help("path to the fragment files."),
+                )
+                .arg(
+                    Arg::with_name("anchors")
+                        .long("anchors")
+                        .short("a")
+                        .takes_value(true)
+                        .required(true)
+                        .multiple(true)
+                        .help("path to the anchors files. [Same order as fragments]"),
+                )
+                .arg(
+                    Arg::with_name("common_cells")
+                        .long("common_cells")
+                        .short("c")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the file with cellular barcodes of common assay."),
+                ),
+        )
         .subcommand(
             SubCommand::with_name("autocorr")
                 .about("A subcommand to generate auto-correlation summary statistics.")
@@ -59,6 +82,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
     pretty_env_logger::init_timed();
+
+    if let Some(sub_m) = matches.subcommand_matches("hmm") {
+        hmm::callback(&sub_m)?
+    }
 
     if let Some(sub_m) = matches.subcommand_matches("autocorr") {
         spatial::callback(&sub_m)?

@@ -3,7 +3,7 @@ use std::ops::Range;
 #[derive(Debug)]
 pub struct Records<T> {
     range: Range<T>,
-    cb: u64
+    cb: u64,
 }
 
 impl Records<u32> {
@@ -20,10 +20,8 @@ impl Records<u32> {
             }
         }
 
-        let range = Range{start, end};
+        let range = Range { start, end };
         let cb = carina::barcode::cb_string_to_u64(cb.as_bytes()).unwrap();
-        Records {
-            range, cb
-        }
+        Records { range, cb }
     }
 }

@@ -5,9 +5,10 @@ use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
 mod fragment;
+mod hmm;
+mod model;
 mod records;
 mod spatial;
-mod hmm;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("indus")
@@ -34,6 +35,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .required(true)
                         .multiple(true)
                         .help("path to the anchors files. [Same order as fragments]"),
+                )
+                .arg(
+                    Arg::with_name("hmm")
+                        .long("hmm")
+                        .short("h")
+                        .takes_value(true)
+                        .required(true)
+                        .multiple(true)
+                        .help("path to the chromeHMM model.txt file"),
                 )
                 .arg(
                     Arg::with_name("common_cells")

@@ -1,8 +1,8 @@
 use crate::records::Records;
 use std::ops::Range;
 
-use std::path::PathBuf;
 use rust_htslib::tbx::{self, Read};
+use std::path::PathBuf;
 
 pub struct Fragment {
     _filepath: PathBuf,
@@ -11,12 +11,12 @@ pub struct Fragment {
 
 impl Fragment {
     pub fn from_pathbuf(filepath: PathBuf) -> Fragment {
-        let tbx_reader = tbx::Reader::from_path(&filepath)
-            .expect(&format!("Could not open {:?}", filepath));
+        let tbx_reader =
+            tbx::Reader::from_path(&filepath).expect(&format!("Could not open {:?}", filepath));
 
         Fragment {
             _filepath: filepath,
-            reader: tbx_reader
+            reader: tbx_reader,
         }
     }
 
@@ -33,10 +33,13 @@ impl Fragment {
 
     pub fn fetch(&mut self, tid: u64, region: &Range<u32>) -> Vec<Records<u32>> {
         // Set region to fetch.
-        self.reader.fetch(tid, region.start as u64, region.end as u64)
+        self.reader
+            .fetch(tid, region.start as u64, region.end as u64)
             .expect("Could not seek to fetch region");
 
-        let data: Vec<Records<u32>> = self.reader.records()
+        let data: Vec<Records<u32>> = self
+            .reader
+            .records()
             .map(|x| String::from_utf8(x.unwrap()).expect("UTF8 conversion error"))
             .map(|x| Records::from_string(x))
             .collect();

@@ -2,6 +2,7 @@ use crate::records::Records;
 use std::ops::Range;
 
 use rust_htslib::tbx::{self, Read};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub struct Fragment {
@@ -31,19 +32,26 @@ impl Fragment {
         }
     }
 
-    pub fn fetch(&mut self, tid: u64, region: &Range<u32>) -> Vec<Records<u32>> {
+    pub fn fetch(
+        &mut self,
+        tid: u64,
+        region: &Range<u32>,
+        assay_cells: &HashSet<u64>,
+        _num_common_cells: usize,
+    ) -> Vec<Records<u32>> {
         // Set region to fetch.
         self.reader
             .fetch(tid, region.start as u64, region.end as u64)
             .expect("Could not seek to fetch region");
 
-        let data: Vec<Records<u32>> = self
+        let all_records: Vec<Records<u32>> = self
             .reader
             .records()
             .map(|x| String::from_utf8(x.unwrap()).expect("UTF8 conversion error"))
-            .map(|x| Records::from_string(x))
+            .map(|x| Records::from_string(x, assay_cells))
+            .flatten()
             .collect();
 
-        return data;
+        return all_records;
     }
 }

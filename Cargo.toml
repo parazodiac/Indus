@@ -8,14 +8,15 @@ edition = "2018"
 
 [dependencies]
 csv = "1.1.5"
+bio = "0.33.0"
 log = "0.4.11"
 rand = "0.8.2"
 sprs = "0.10.0"
 clap = "2.33.3"
 crossbeam = "0.8.0"
 indicatif = "0.15.0"
-pretty_env_logger = "0.4.0"
 rust-htslib = "0.36.0"
+pretty_env_logger = "0.4.0"
 
 [dependencies.carina]
 git = "https://github.com/parazodiac/Carina"

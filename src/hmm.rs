@@ -2,7 +2,7 @@ use crate::config::ProbT;
 use crate::fragment::Fragment;
 use crate::model;
 use crate::quantify;
-use crate::record::AssayRecords;
+use crate::record::{AssayRecords, Experiment};
 
 use clap::ArgMatches;
 use std::collections::HashMap;
@@ -113,14 +113,14 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                 &vec_anchor_triplets.get(i).unwrap(),
                 num_common_cells,
             );
-            AssayRecords {
-                records: cell_records,
-            }
+
+            AssayRecords::new(cell_records)
         })
         .collect();
+    let exp = Experiment::new(assay_data);
 
     info!("Starting forward backward");
-    quantify::get_posterior(assay_data[0].get_cell_records(0).unwrap())?;
+    quantify::get_posterior(exp.get_cell_data(0))?;
 
     Ok(())
 }

@@ -3,10 +3,11 @@ use std::error::Error;
 use std::fmt;
 use std::io::BufRead;
 
+use crate::config::ProbT;
 pub struct Hmm {
-    init: Vec<f32>,
-    emission: Vec<Vec<f32>>,
-    _transition: Vec<Vec<f32>>,
+    init: Vec<ProbT>,
+    emission: Vec<Vec<ProbT>>,
+    _transition: Vec<Vec<ProbT>>,
 }
 
 impl fmt::Debug for Hmm {
@@ -51,7 +52,7 @@ impl Hmm {
                 "probinit" => {
                     assert!(toks.len() == 3);
                     let state = toks[1].parse::<usize>().unwrap() - 1;
-                    let probability = toks[2].parse::<f32>().unwrap();
+                    let probability = toks[2].parse::<ProbT>().unwrap();
                     init[state] = probability + 1.15358E-31;
                     pcounter += 1;
                 }
@@ -59,7 +60,7 @@ impl Hmm {
                     assert!(toks.len() == 4);
                     let fstate = toks[1].parse::<usize>().unwrap() - 1;
                     let sstate = toks[2].parse::<usize>().unwrap() - 1;
-                    let probability = toks[3].parse::<f32>().unwrap();
+                    let probability = toks[3].parse::<ProbT>().unwrap();
                     transition[fstate][sstate] = probability;
                     tcounter += 1;
                 }
@@ -72,7 +73,7 @@ impl Hmm {
 
                     let state = toks[1].parse::<usize>().unwrap() - 1;
                     let assay = toks[2].parse::<usize>().unwrap();
-                    let probability = toks[5].parse::<f32>().unwrap();
+                    let probability = toks[5].parse::<ProbT>().unwrap();
                     emission[state][assay] = probability;
                     ecounter += 1;
                 }

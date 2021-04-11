@@ -4,10 +4,12 @@ extern crate log;
 use clap::{App, Arg, SubCommand};
 use std::error::Error;
 
+mod config;
 mod fragment;
 mod hmm;
 mod model;
-mod records;
+mod quantify;
+mod record;
 mod spatial;
 
 fn main() -> Result<(), Box<dyn Error>> {

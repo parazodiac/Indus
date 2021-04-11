@@ -1,8 +1,11 @@
+use crate::config::ProbT;
 use crate::fragment::Fragment;
 use crate::model;
+use crate::quantify;
+use crate::record::AssayRecords;
 
 use clap::ArgMatches;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::BufRead;
 use std::ops::Range;
@@ -22,16 +25,20 @@ fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
 
 fn get_anchors(
     sub_m: &ArgMatches,
-    string_index_common_cells: &HashMap<String, u32>,
-) -> Result<(Vec<Vec<(u32, u64, f32)>>, Vec<HashSet<u64>>), Box<dyn Error>> {
+    common_cells: &Vec<String>,
+) -> Result<Vec<HashMap<u64, HashMap<u32, ProbT>>>, Box<dyn Error>> {
     // reading anchors
+    let string_index_common_cells: HashMap<String, u32> = common_cells
+        .iter()
+        .enumerate()
+        .map(|(i, x)| (x.clone(), i as u32))
+        .collect();
+
     let mut vec_anchor_triplets = Vec::with_capacity(5);
-    let mut vec_assay_cells = Vec::with_capacity(5);
 
     let anchor_file_paths = carina::file::files_path_from_clap(sub_m, "anchors")?;
     for file_path in anchor_file_paths {
-        let mut anchor_triplets: Vec<(u32, u64, f32)> = Vec::with_capacity(1_000_000);
-        let mut assay_cells: HashSet<u64> = HashSet::with_capacity(10_000);
+        let mut anchor_triplets: HashMap<u64, HashMap<u32, ProbT>> = HashMap::with_capacity(10_000);
 
         let reader = carina::file::bufreader_from_filepath(file_path)?;
         for line in reader.lines() {
@@ -47,17 +54,18 @@ fn get_anchors(
 
             let assay_cell_index: u64 =
                 carina::barcode::cb_string_to_u64_with_id(cb_str[0].as_bytes(), 16, cb_id)?;
-            assay_cells.insert(assay_cell_index);
 
-            let score = toks[2].parse::<f32>().unwrap();
-            anchor_triplets.push((common_cell_index, assay_cell_index, score));
+            let score = toks[2].parse::<ProbT>().unwrap();
+            anchor_triplets
+                .entry(assay_cell_index)
+                .or_insert(HashMap::new())
+                .insert(common_cell_index, score);
         }
 
         vec_anchor_triplets.push(anchor_triplets);
-        vec_assay_cells.push(assay_cells);
     }
 
-    Ok((vec_anchor_triplets, vec_assay_cells))
+    Ok(vec_anchor_triplets)
 }
 
 pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
@@ -72,16 +80,13 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         common_cells[0]
     );
 
-    let string_index_common_cells: HashMap<String, u32> = common_cells
-        .iter()
-        .enumerate()
-        .map(|(i, x)| (x.clone(), i as u32))
-        .collect();
-
-    let (vec_anchor_triplets, vec_assay_cells) = get_anchors(&sub_m, &string_index_common_cells)?;
+    let vec_anchor_triplets = get_anchors(&sub_m, &common_cells)?;
     let num_assays = vec_anchor_triplets.len();
-    let assay_num_cells: Vec<usize> = vec_assay_cells.iter().map(|x| x.len()).collect();
-    let assay_num_anchors: Vec<usize> = vec_anchor_triplets.iter().map(|x| x.len()).collect();
+    let assay_num_cells: Vec<usize> = vec_anchor_triplets.iter().map(|x| x.len()).collect();
+    let assay_num_anchors: Vec<usize> = vec_anchor_triplets
+        .iter()
+        .map(|x| x.iter().map(|(_, z)| z.len()).sum())
+        .collect();
     info!(
         "Found {} assays with {:?} cells and {:?} anchors",
         num_assays, assay_num_cells, assay_num_anchors
@@ -98,13 +103,24 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         end: 250_000_000,
     };
     let tids: Vec<u64> = frags.iter().map(|x| x.tid("chr1")).collect();
-    //let assay_data: Vec<Vec<Records<u32>>> = frags
-    let assay_data: Vec<usize> = frags
+    let assay_data: Vec<AssayRecords<ProbT>> = frags
         .iter_mut()
         .enumerate()
-        .map(|(i, x)| x.fetch(tids[i], &range, &vec_assay_cells[i], num_common_cells).len())
+        .map(|(i, x)| {
+            let cell_records = x.fetch(
+                tids[i],
+                &range,
+                &vec_anchor_triplets.get(i).unwrap(),
+                num_common_cells,
+            );
+            AssayRecords {
+                records: cell_records,
+            }
+        })
         .collect();
 
-    println!("{:?}", assay_data);
+    info!("Starting forward backward");
+    quantify::get_posterior(assay_data[0].get_cell_records(0).unwrap())?;
+
     Ok(())
 }

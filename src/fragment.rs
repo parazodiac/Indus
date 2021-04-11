@@ -1,8 +1,9 @@
-use crate::records::Records;
+use crate::config::ProbT;
+use crate::record::{CellRecords, Record};
 use std::ops::Range;
 
 use rust_htslib::tbx::{self, Read};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub struct Fragment {
@@ -36,22 +37,40 @@ impl Fragment {
         &mut self,
         tid: u64,
         region: &Range<u32>,
-        assay_cells: &HashSet<u64>,
-        _num_common_cells: usize,
-    ) -> Vec<Records<u32>> {
+        assay_cells: &HashMap<u64, HashMap<u32, ProbT>>,
+        num_common_cells: usize,
+    ) -> Vec<CellRecords<ProbT>> {
         // Set region to fetch.
         self.reader
             .fetch(tid, region.start as u64, region.end as u64)
             .expect("Could not seek to fetch region");
 
-        let all_records: Vec<Records<u32>> = self
+        let all_records: Vec<Record<u64>> = self
             .reader
             .records()
             .map(|x| String::from_utf8(x.unwrap()).expect("UTF8 conversion error"))
-            .map(|x| Records::from_string(x, assay_cells))
+            .map(|x| Record::from_string(x, assay_cells))
             .flatten()
             .collect();
 
-        return all_records;
+        let mut cell_records: Vec<Vec<Record<ProbT>>> = vec![Vec::new(); num_common_cells];
+        for record in all_records {
+            let cb = record.id();
+            match assay_cells.get(&cb) {
+                Some(dict) => {
+                    for (&cell_id, &prob) in dict {
+                        let new_record = Record::new_with_id(&record.range(), prob);
+                        cell_records[cell_id as usize].push(new_record);
+                    }
+                }
+                None => (),
+            };
+        }
+
+        let cell_records: Vec<CellRecords<ProbT>> = cell_records
+            .into_iter()
+            .map(|x| CellRecords { records: x })
+            .collect();
+        return cell_records;
     }
 }

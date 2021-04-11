@@ -69,7 +69,7 @@ impl Fragment {
 
         let cell_records: Vec<CellRecords<ProbT>> = cell_records
             .into_iter()
-            .map(|x| CellRecords::new(x) )
+            .map(|x| CellRecords::new(x))
             .collect();
         return cell_records;
     }

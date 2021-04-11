@@ -83,10 +83,8 @@ pub struct CellRecords<R> {
 }
 
 impl CellRecords<ProbT> {
-    pub fn new(records: Vec<Record<ProbT>>) -> CellRecords<ProbT>{
-        CellRecords {
-            records
-        }
+    pub fn new(records: Vec<Record<ProbT>>) -> CellRecords<ProbT> {
+        CellRecords { records }
     }
 
     pub fn records(&self) -> &Vec<Record<ProbT>> {
@@ -103,12 +101,10 @@ pub struct AssayRecords<R> {
 }
 
 impl AssayRecords<ProbT> {
-    pub fn new(records: Vec<CellRecords<ProbT>>) -> AssayRecords<ProbT>{
-        AssayRecords {
-            records
-        }
+    pub fn new(records: Vec<CellRecords<ProbT>>) -> AssayRecords<ProbT> {
+        AssayRecords { records }
     }
-    
+
     pub fn get_cell_records(&self, cell_id: usize) -> Option<&CellRecords<ProbT>> {
         self.records.get(cell_id)
     }
@@ -119,17 +115,18 @@ impl AssayRecords<ProbT> {
 ////////////////////////////////////////////
 
 pub struct Experiment<ProbT> {
-    records: Vec<AssayRecords<ProbT>>
+    records: Vec<AssayRecords<ProbT>>,
 }
 
 impl Experiment<ProbT> {
-    pub fn new(records: Vec<AssayRecords<ProbT>>) -> Experiment<ProbT>{
-        Experiment {
-            records
-        }
+    pub fn new(records: Vec<AssayRecords<ProbT>>) -> Experiment<ProbT> {
+        Experiment { records }
     }
 
     pub fn get_cell_data(&self, cell_id: usize) -> Vec<&CellRecords<ProbT>> {
-        self.records.iter().map(|x| x.get_cell_records(cell_id).unwrap()).collect()
+        self.records
+            .iter()
+            .map(|x| x.get_cell_records(cell_id).unwrap())
+            .collect()
     }
 }

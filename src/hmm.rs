@@ -120,7 +120,8 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     let exp = Experiment::new(assay_data);
 
     info!("Starting forward backward");
-    quantify::get_posterior(exp.get_cell_data(0))?;
+    let probs = quantify::run_fwd_bkw(exp.get_cell_data(0), &hmm)?;
+    info!("All Done: {:?}", probs.nnz());
 
     Ok(())
 }

@@ -1,4 +1,6 @@
+use crate::config::THRESHOLDS;
 use clap::ArgMatches;
+
 use std::error::Error;
 use std::fmt;
 use std::io::BufRead;
@@ -7,7 +9,7 @@ use crate::config::ProbT;
 pub struct Hmm {
     init: Vec<ProbT>,
     emission: Vec<Vec<ProbT>>,
-    _transition: Vec<Vec<ProbT>>,
+    transition: Vec<Vec<ProbT>>,
 }
 
 impl fmt::Debug for Hmm {
@@ -21,6 +23,27 @@ impl fmt::Debug for Hmm {
 }
 
 impl Hmm {
+    pub fn get_init_prob(&self, state: usize) -> ProbT {
+        self.init[state]
+    }
+
+    pub fn get_transition_prob(&self, pstate: usize, state: usize) -> ProbT {
+        self.transition[pstate][state]
+    }
+
+    pub fn get_emission_prob(&self, state: usize, observations: &Vec<ProbT>) -> ProbT {
+        let mut prob = 0.0;
+        for assay_id in 0..observations.len() {
+            let emission_prob = self.emission[state][assay_id];
+            match observations[assay_id] >= THRESHOLDS[assay_id] {
+                true => prob *= emission_prob,
+                false => prob *= 1.0 - emission_prob,
+            }
+        }
+
+        prob
+    }
+
     pub fn num_states(&self) -> usize {
         self.init.len()
     }
@@ -87,7 +110,7 @@ impl Hmm {
         Hmm {
             init,
             emission,
-            _transition: transition,
+            transition,
         }
     }
 }

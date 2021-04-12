@@ -54,34 +54,36 @@ fn backward(
     let mut b_curr = vec![0.1; num_states];
     let mut b_prev = vec![0.1; num_states];
 
-    for i in (1..num_observations + 1).rev() {
-        if i < num_observations {
-            let obv_emissions: Vec<ProbT> = (0..num_states)
-                .into_iter()
-                .map(|state| hmm.get_emission_prob(state, &observations[i]))
-                .collect();
-
-            b_curr.iter_mut().for_each(|i| *i = 0.0);
-            for state in 0..num_states {
-                for next_state in 0..num_states {
-                    b_curr[state] += hmm.get_transition_prob(state, next_state)
-                        * obv_emissions[next_state]
-                        * b_prev[next_state];
-                }
-            }
-            b_prev = b_curr.clone();
-        }
-
+    let update_triplet = |i: usize, posterior: &mut sprs::TriMat<ProbT>, b_curr: &Vec<ProbT>| {
         let probs: Vec<ProbT> = (0..num_states)
-            .map(|state| fprob[i - 1][state] * b_curr[state] / norm)
+            .map(|state| fprob[i][state] * b_curr[state] / norm)
             .collect();
         let state_norm: ProbT = probs.iter().sum();
         probs.into_iter().enumerate().for_each(|(state, prob)| {
             let prob = prob / state_norm;
             if prob > 1e-4 {
-                posterior.add_triplet(i - 1, state, prob)
+                posterior.add_triplet(i, state, prob)
             }
         });
+    };
+    update_triplet(num_observations - 1, posterior, &b_curr);
+
+    for i in (1..num_observations).rev() {
+        let obv_emissions: Vec<ProbT> = (0..num_states)
+            .into_iter()
+            .map(|state| hmm.get_emission_prob(state, &observations[i]))
+            .collect();
+
+        b_curr.iter_mut().for_each(|i| *i = 0.0);
+        for state in 0..num_states {
+            for next_state in 0..num_states {
+                b_curr[state] += hmm.get_transition_prob(state, next_state)
+                    * obv_emissions[next_state]
+                    * b_prev[next_state];
+            }
+        }
+        b_prev = b_curr.clone();
+        update_triplet(i - 1, posterior, &b_curr);
     }
 
     Ok(())
@@ -153,7 +155,14 @@ mod tests {
 
         let mat =
             crate::quantify::get_posterior(vec![vec![0.0], vec![1.0], vec![2.0]], &hmm).unwrap();
-        let probs: Vec<String> = mat.data().into_iter().map(|&x| format!("{:.4}", x)).collect();
-        assert_eq!(probs, ["0.5616", "0.4384", "0.8942", "0.1058", "0.9050", "0.0950"]);
+        let probs: Vec<String> = mat
+            .data()
+            .into_iter()
+            .map(|&x| format!("{:.4}", x))
+            .collect();
+        assert_eq!(
+            probs,
+            ["0.5616", "0.4384", "0.8942", "0.1058", "0.9050", "0.0950"]
+        );
     }
 }

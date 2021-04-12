@@ -121,6 +121,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         .collect();
     let exp = Experiment::new(assay_data);
 
+    let num_common_cells = 1;
     info!("Starting forward backward");
     let pbar = ProgressBar::new(num_common_cells as u64);
     pbar.set_style(
@@ -133,7 +134,8 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
     for cell_id in 0..num_common_cells {
         pbar.inc(1);
-        quantify::run_fwd_bkw(exp.get_cell_data(cell_id), &hmm)?;
+        let quants = quantify::run_fwd_bkw(exp.get_cell_data(cell_id), &hmm)?;
+        println!("{:?}", quants);
     }
 
     pbar.finish();

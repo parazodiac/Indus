@@ -5,6 +5,8 @@ use crate::quantify;
 use crate::record::{AssayRecords, Experiment};
 
 use clap::ArgMatches;
+use indicatif::{ProgressBar, ProgressStyle};
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::BufRead;
@@ -120,8 +122,22 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     let exp = Experiment::new(assay_data);
 
     info!("Starting forward backward");
-    let probs = quantify::run_fwd_bkw(exp.get_cell_data(0), &hmm)?;
-    info!("All Done: {:?}", probs.nnz());
+    let pbar = ProgressBar::new(num_common_cells as u64);
+    pbar.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.red} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+            )
+            .progress_chars("╢▌▌░╟"),
+    );
+
+    for cell_id in 0..num_common_cells {
+        pbar.inc(1);
+        quantify::run_fwd_bkw(exp.get_cell_data(cell_id), &hmm)?;
+    }
+
+    pbar.finish();
+    info!("All Done");
 
     Ok(())
 }

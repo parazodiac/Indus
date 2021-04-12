@@ -51,37 +51,36 @@ fn backward(
     fprob: Vec<Vec<ProbT>>,
     posterior: &mut sprs::TriMat<ProbT>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut b_curr = vec![0.0; num_states];
-    let mut b_prev = vec![0.0; num_states];
+    let mut b_curr = vec![0.1; num_states];
+    let mut b_prev = vec![0.1; num_states];
 
-    for i in (0..num_observations).rev() {
-        let obv_emissions: Vec<ProbT> = (0..num_states)
-            .into_iter()
-            .map(|state| hmm.get_emission_prob(state, &observations[i]))
-            .collect();
+    for i in (1..num_observations + 1).rev() {
+        if i < num_observations {
+            let obv_emissions: Vec<ProbT> = (0..num_states)
+                .into_iter()
+                .map(|state| hmm.get_emission_prob(state, &observations[i]))
+                .collect();
 
-        b_curr.iter_mut().for_each(|i| *i = 0.0);
-        for state in 0..num_states {
-            if i == num_observations - 1 {
-                b_curr[state] = 0.1;
-            } else {
+            b_curr.iter_mut().for_each(|i| *i = 0.0);
+            for state in 0..num_states {
                 for next_state in 0..num_states {
                     b_curr[state] += hmm.get_transition_prob(state, next_state)
                         * obv_emissions[next_state]
                         * b_prev[next_state];
                 }
             }
+            b_prev = b_curr.clone();
         }
 
-        b_prev = b_curr.clone();
-        
-        let probs: Vec<ProbT> = (0..num_states).map(|state| {
-            fprob[i][state] * b_curr[state] / norm
-        }).collect();
+        let probs: Vec<ProbT> = (0..num_states)
+            .map(|state| fprob[i - 1][state] * b_curr[state] / norm)
+            .collect();
         let state_norm: ProbT = probs.iter().sum();
         probs.into_iter().enumerate().for_each(|(state, prob)| {
             let prob = prob / state_norm;
-            if prob > 1e-4 {  posterior.add_triplet(i, state, prob) }
+            if prob > 1e-4 {
+                posterior.add_triplet(i - 1, state, prob)
+            }
         });
     }
 
@@ -90,12 +89,11 @@ fn backward(
 
 fn get_posterior(observations: Vec<Vec<ProbT>>, hmm: &Hmm) -> Result<CsMat<ProbT>, Box<dyn Error>> {
     let num_states = hmm.num_states();
-    let num_assays = hmm.num_assays();
+    let _num_assays = hmm.num_assays();
     let num_observations = observations.len();
 
-    assert!(num_assays == observations[0].len());
+    //assert!(num_assays == observations[0].len());
     let (norm, fprob) = forward(&observations, &hmm, num_states, num_observations)?;
-
     let mut posterior = sprs::TriMat::new((num_observations, num_states));
     backward(
         observations,
@@ -142,4 +140,20 @@ pub fn run_fwd_bkw(
 
     let posterior = get_posterior(observation_list, hmm)?;
     Ok(posterior)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_fwd_bkw() {
+        let path =
+            std::path::PathBuf::from("/home/srivastavaa/parazodiac/Indus/data/model_test.txt");
+        let file_reader = carina::file::bufreader_from_filepath(path).unwrap();
+        let hmm = crate::model::Hmm::new(file_reader);
+
+        let mat =
+            crate::quantify::get_posterior(vec![vec![0.0], vec![1.0], vec![2.0]], &hmm).unwrap();
+        let probs: Vec<String> = mat.data().into_iter().map(|&x| format!("{:.4}", x)).collect();
+        assert_eq!(probs, ["0.5616", "0.4384", "0.8942", "0.1058", "0.9050", "0.0950"]);
+    }
 }

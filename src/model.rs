@@ -32,10 +32,10 @@ impl Hmm {
     }
 
     pub fn get_emission_prob(&self, state: usize, observations: &Vec<ProbT>) -> ProbT {
-        let mut prob = 0.0;
+        let mut prob = 1.0;
         for assay_id in 0..observations.len() {
             let emission_prob = self.emission[state][assay_id];
-            match observations[assay_id] >= THRESHOLDS[assay_id] {
+            match observations[assay_id] > THRESHOLDS[assay_id] {
                 true => prob *= emission_prob,
                 false => prob *= 1.0 - emission_prob,
             }

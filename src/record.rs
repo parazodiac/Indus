@@ -77,7 +77,7 @@ impl Record<u64> {
 ////////////////////////////////////////////
 /// Cell Records
 ////////////////////////////////////////////
-
+#[derive(Debug)]
 pub struct CellRecords<R> {
     records: Vec<Record<R>>,
 }

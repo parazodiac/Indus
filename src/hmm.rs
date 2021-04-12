@@ -134,8 +134,11 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
     for cell_id in 0..num_common_cells {
         pbar.inc(1);
-        let quants = quantify::run_fwd_bkw(exp.get_cell_data(cell_id), &hmm)?;
-        println!("{:?}", quants);
+        let cell_data = exp.get_cell_data(cell_id);
+        let post_prob = quantify::run_fwd_bkw(cell_data, &hmm)?;
+
+        let out_path = std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/posterior.mtx");
+        sprs::io::write_matrix_market(out_path, &post_prob)?;
     }
 
     pbar.finish();

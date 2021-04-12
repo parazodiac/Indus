@@ -30,6 +30,9 @@ fn forward(
 
             f_curr[state] = hmm.get_emission_prob(state, &observations[i]) * prev_f_sum;
         }
+        let prob_norm: ProbT = f_curr.iter().sum();
+        f_curr.iter_mut().for_each(|x| *x /= prob_norm);
+
         fprob[i] = f_curr.clone();
         f_prev = f_curr.clone();
     }
@@ -82,6 +85,10 @@ fn backward(
                     * b_prev[next_state];
             }
         }
+
+        let prob_norm: ProbT = b_curr.iter().sum();
+        b_curr.iter_mut().for_each(|x| *x /= prob_norm);
+
         b_prev = b_curr.clone();
         update_triplet(i - 1, posterior, &b_curr);
     }

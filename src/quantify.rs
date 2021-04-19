@@ -16,9 +16,9 @@ fn forward(
 ) -> Result<ProbT, Box<dyn Error>> {
     let mut f_curr = vec![0.0; num_states];
     let mut f_prev = vec![0.0; num_states];
-    //let mut fprob = vec![vec![0.0; num_states]; num_observations];
 
     for i in 0..num_observations {
+        let is_all_zero: bool = observations[i].iter().sum::<ProbT>() == 0.0;
         for state in 0..num_states {
             let mut prev_f_sum = 0.0;
             if i == 0 {
@@ -29,7 +29,8 @@ fn forward(
                 }
             }
 
-            f_curr[state] = hmm.get_emission_prob(state, &observations[i]) * prev_f_sum;
+            f_curr[state] =
+                hmm.get_emission_prob(state, &observations[i], is_all_zero) * prev_f_sum;
         }
         let prob_norm: ProbT = f_curr.iter().sum();
         f_curr.iter_mut().for_each(|x| *x /= prob_norm);
@@ -73,9 +74,10 @@ fn backward(
     update_triplet(num_observations - 1, posterior, &b_curr);
 
     for i in (1..num_observations).rev() {
+        let is_all_zero: bool = observations[i].iter().sum::<ProbT>() == 0.0;
         let obv_emissions: Vec<ProbT> = (0..num_states)
             .into_iter()
-            .map(|state| hmm.get_emission_prob(state, &observations[i]))
+            .map(|state| hmm.get_emission_prob(state, &observations[i], is_all_zero))
             .collect();
 
         b_curr.iter_mut().for_each(|i| *i = 0.0);
@@ -97,13 +99,18 @@ fn backward(
     Ok(())
 }
 
-fn get_posterior(observations: Vec<Vec<ProbT>>, hmm: &Hmm, fprob: &mut Vec<Vec<ProbT>>) -> Result<CsMat<ProbT>, Box<dyn Error>> {
+fn get_posterior(
+    observations: Vec<Vec<ProbT>>,
+    hmm: &Hmm,
+    fprob: &mut Vec<Vec<ProbT>>,
+) -> Result<CsMat<ProbT>, Box<dyn Error>> {
     let num_states = hmm.num_states();
-    let _num_assays = hmm.num_assays();
+    let num_assays = hmm.num_assays();
     let num_observations = observations.len();
 
-    //assert!(num_assays == observations[0].len());
+    assert!(num_assays == observations[0].len());
     let norm = forward(&observations, &hmm, fprob, num_states, num_observations)?;
+
     let mut posterior = sprs::TriMat::new((num_observations, num_states));
     backward(
         observations,
@@ -121,7 +128,7 @@ fn get_posterior(observations: Vec<Vec<ProbT>>, hmm: &Hmm, fprob: &mut Vec<Vec<P
 pub fn run_fwd_bkw(
     cell_records: Vec<&CellRecords<ProbT>>,
     hmm: &Hmm,
-    fprob: &mut Vec<Vec<ProbT>>
+    fprob: &mut Vec<Vec<ProbT>>,
 ) -> Result<CsMat<ProbT>, Box<dyn Error>> {
     let itrees: Vec<IntervalTree<u32, ProbT>> = cell_records
         .into_iter()
@@ -163,34 +170,47 @@ mod tests {
         let hmm = crate::model::Hmm::new(file_reader);
         let mut fprob = vec![vec![0.0; 2]; 3];
 
-        let mat =
-            crate::quantify::get_posterior(vec![vec![0.0], vec![1.0], vec![2.0]], &hmm, &mut fprob).unwrap();
+        let mat = crate::quantify::get_posterior(
+            vec![
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0],
+            ],
+            &hmm,
+            &mut fprob,
+        )
+        .unwrap();
         let probs: Vec<String> = mat
             .data()
             .into_iter()
             .map(|&x| format!("{:.4}", x))
             .collect();
+        println!("{:?}", mat.to_dense());
         assert_eq!(
             probs,
-            ["0.5616", "0.4384", "0.8942", "0.1058", "0.9050", "0.0950"]
+            ["0.9342", "0.0658", "0.6665", "0.3335", "0.1209", "0.8791"]
         );
     }
 
     #[test]
     fn test_fwd_bkw_full() {
-        let path =
-            std::path::PathBuf::from("/home/srivastavaa/parazodiac/Indus/data/model_12.txt");
+        let path = std::path::PathBuf::from("/home/srivastavaa/parazodiac/Indus/data/model_12.txt");
         let file_reader = carina::file::bufreader_from_filepath(path).unwrap();
         let hmm = crate::model::Hmm::new(file_reader);
         let mut fprob = vec![vec![0.0; 12]; 5];
 
-        let mat =
-            crate::quantify::get_posterior(vec![
-                vec![1.0, 0.0, 0.0, 0.0, 0.0], 
+        let mat = crate::quantify::get_posterior(
+            vec![
+                vec![1.0, 0.0, 0.0, 0.0, 0.0],
                 vec![1.0, 0.0, 0.0, 0.0, 0.0],
                 vec![0.0, 0.0, 0.0, 0.0, 0.0],
                 vec![0.0, 0.0, 0.0, 0.0, 0.0],
-                vec![1.0, 0.0, 0.0, 0.0, 0.0]], &hmm, &mut fprob).unwrap();
+                vec![1.0, 0.0, 0.0, 0.0, 0.0],
+            ],
+            &hmm,
+            &mut fprob,
+        )
+        .unwrap();
 
         let probs: Vec<String> = mat
             .data()

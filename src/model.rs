@@ -10,6 +10,7 @@ pub struct Hmm {
     init: Vec<ProbT>,
     emission: Vec<Vec<ProbT>>,
     transition: Vec<Vec<ProbT>>,
+    all_zero: Vec<ProbT>,
 }
 
 impl fmt::Debug for Hmm {
@@ -31,7 +32,16 @@ impl Hmm {
         self.transition[pstate][state]
     }
 
-    pub fn get_emission_prob(&self, state: usize, observations: &Vec<ProbT>) -> ProbT {
+    pub fn get_emission_prob(
+        &self,
+        state: usize,
+        observations: &Vec<ProbT>,
+        is_all_zero: bool,
+    ) -> ProbT {
+        if is_all_zero {
+            return self.get_false_emission(state);
+        }
+
         let mut prob = 1.0;
         for assay_id in 0..observations.len() {
             let emission_prob = self.emission[state][assay_id];
@@ -42,6 +52,10 @@ impl Hmm {
         }
 
         prob
+    }
+
+    pub fn get_false_emission(&self, state: usize) -> ProbT {
+        self.all_zero[state]
     }
 
     pub fn num_states(&self) -> usize {
@@ -107,10 +121,15 @@ impl Hmm {
         assert_eq!(tcounter, num_states * num_states);
         assert_eq!(ecounter, num_states * num_assays);
 
+        let all_zero: Vec<ProbT> = (0..num_states)
+            .map(|x| emission[x].iter().map(|y| 1.0 - y).product())
+            .collect();
+
         Hmm {
             init,
             emission,
             transition,
+            all_zero,
         }
     }
 }

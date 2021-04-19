@@ -18,7 +18,6 @@ fn forward(
     let mut f_prev = vec![0.0; num_states];
 
     for i in 0..num_observations {
-        let is_all_zero: bool = observations[i].iter().sum::<ProbT>() == 0.0;
         for state in 0..num_states {
             let mut prev_f_sum = 0.0;
             if i == 0 {
@@ -30,7 +29,7 @@ fn forward(
             }
 
             f_curr[state] =
-                hmm.get_emission_prob(state, &observations[i], is_all_zero) * prev_f_sum;
+                hmm.get_emission_prob(state, &observations[i]) * prev_f_sum;
         }
         let prob_norm: ProbT = f_curr.iter().sum();
         f_curr.iter_mut().for_each(|x| *x /= prob_norm);
@@ -74,10 +73,9 @@ fn backward(
     update_triplet(num_observations - 1, posterior, &b_curr);
 
     for i in (1..num_observations).rev() {
-        let is_all_zero: bool = observations[i].iter().sum::<ProbT>() == 0.0;
         let obv_emissions: Vec<ProbT> = (0..num_states)
             .into_iter()
-            .map(|state| hmm.get_emission_prob(state, &observations[i], is_all_zero))
+            .map(|state| hmm.get_emission_prob(state, &observations[i]))
             .collect();
 
         b_curr.iter_mut().for_each(|i| *i = 0.0);
@@ -99,6 +97,7 @@ fn backward(
     Ok(())
 }
 
+#[inline]
 fn get_posterior(
     observations: Vec<Vec<ProbT>>,
     hmm: &Hmm,
@@ -125,6 +124,7 @@ fn get_posterior(
     Ok(posterior.to_csr())
 }
 
+#[inline]
 pub fn run_fwd_bkw(
     cell_records: Vec<&CellRecords<ProbT>>,
     hmm: &Hmm,

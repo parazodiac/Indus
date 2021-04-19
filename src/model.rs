@@ -10,7 +10,7 @@ pub struct Hmm {
     init: Vec<ProbT>,
     emission: Vec<Vec<ProbT>>,
     transition: Vec<Vec<ProbT>>,
-    all_zero: Vec<ProbT>,
+    num_assays: usize
 }
 
 impl fmt::Debug for Hmm {
@@ -36,26 +36,15 @@ impl Hmm {
         &self,
         state: usize,
         observations: &Vec<ProbT>,
-        is_all_zero: bool,
     ) -> ProbT {
-        if is_all_zero {
-            return self.get_false_emission(state);
-        }
-
-        let mut prob = 1.0;
-        for assay_id in 0..observations.len() {
-            let emission_prob = self.emission[state][assay_id];
-            match observations[assay_id] > THRESHOLDS[assay_id] {
-                true => prob *= emission_prob,
-                false => prob *= 1.0 - emission_prob,
+        let mut id: usize = 0;
+        for (index, &observation) in observations.into_iter().enumerate() {
+            if observation > THRESHOLDS[index] {
+                id |= 1 << index;
             }
         }
 
-        prob
-    }
-
-    pub fn get_false_emission(&self, state: usize) -> ProbT {
-        self.all_zero[state]
+        self.emission[state][id]
     }
 
     pub fn num_states(&self) -> usize {
@@ -63,7 +52,7 @@ impl Hmm {
     }
 
     pub fn num_assays(&self) -> usize {
-        self.emission.get(0).expect("emission not filled").len()
+        self.num_assays
     }
 
     pub fn new(mut reader: std::io::BufReader<std::fs::File>) -> Hmm {
@@ -121,15 +110,31 @@ impl Hmm {
         assert_eq!(tcounter, num_states * num_states);
         assert_eq!(ecounter, num_states * num_assays);
 
-        let all_zero: Vec<ProbT> = (0..num_states)
-            .map(|x| emission[x].iter().map(|y| 1.0 - y).product())
-            .collect();
+        let num_all_combinations = 2_usize.pow(num_assays as u32);
+        let mut all_emission = vec![vec![1.0; num_all_combinations]; num_states];
+        for state in 0..num_states {
+            for i in 0..num_all_combinations {
+                let mut flags = vec![false; num_assays];
+                for (index, &is_present) in format!("{:b}", i).as_bytes().iter().rev().enumerate() {
+                    if is_present == 49 {
+                        flags[index] = true;
+                    }
+                }
 
+                for (index, is_present) in flags.into_iter().enumerate() {
+                    match is_present {
+                        true => all_emission[state][i] *= emission[state][index],
+                        false => all_emission[state][i] *= 1.0 - emission[state][index],
+                    }
+                }
+            }
+        }
+        
         Hmm {
             init,
-            emission,
+            emission: all_emission,
             transition,
-            all_zero,
+            num_assays,
         }
     }
 }

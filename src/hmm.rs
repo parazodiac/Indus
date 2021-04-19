@@ -126,7 +126,6 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
     ];
 
-    //let num_common_cells = 1;
     info!("Starting forward backward");
     let pbar = ProgressBar::new(num_common_cells as u64);
     pbar.set_style(
@@ -141,14 +140,10 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     for cell_id in 0..num_common_cells {
         pbar.inc(1);
         let cell_data = exp.get_cell_data(cell_id);
-
-        fprob
-            .iter_mut()
-            .for_each(|v| v.iter_mut().for_each(|x| *x = 0.0));
         let post_prob = quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob)?;
 
-        let out_path =
-            std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/posterior.mtx");
+        //let out_path =
+        //    std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/posterior.mtx");
         //sprs::io::write_matrix_market(out_path, &post_prob)?;
     }
 

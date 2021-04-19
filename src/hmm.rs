@@ -120,8 +120,12 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         })
         .collect();
     let exp = Experiment::new(assay_data);
+    let chr_lens = vec![248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 
+                        159345973, 145138636, 138394717, 133797422, 135086622, 133275309, 
+                        114364328, 107043718, 101991189, 90338345, 83257441, 80373285, 
+                        58617616, 64444167, 46709983, 50818468];
 
-    let num_common_cells = 1;
+    //let num_common_cells = 1;
     info!("Starting forward backward");
     let pbar = ProgressBar::new(num_common_cells as u64);
     pbar.set_style(
@@ -132,13 +136,16 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
             .progress_chars("╢▌▌░╟"),
     );
 
+    let mut fprob = vec![vec![0.0; hmm.num_states()]; (chr_lens[0]/200) + 1];
     for cell_id in 0..num_common_cells {
         pbar.inc(1);
         let cell_data = exp.get_cell_data(cell_id);
-        let post_prob = quantify::run_fwd_bkw(cell_data, &hmm)?;
+
+        fprob.iter_mut().for_each(|v| v.iter_mut().for_each(|x| *x= 0.0) );
+        let post_prob = quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob)?;
 
         let out_path = std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/posterior.mtx");
-        sprs::io::write_matrix_market(out_path, &post_prob)?;
+        //sprs::io::write_matrix_market(out_path, &post_prob)?;
     }
 
     pbar.finish();

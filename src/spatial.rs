@@ -4,7 +4,6 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use clap::ArgMatches;
-use sce;
 
 use crossbeam::queue::ArrayQueue;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -14,7 +13,7 @@ pub fn get_moransi(
     weights: &sce::SingleCellExperiment<f32>,
     values: &sce::SingleCellExperiment<f32>,
     row_index: usize,
-    row_sums: &Vec<f32>,
+    row_sums: &[f32],
 ) -> Result<f32, Box<dyn Error>> {
     let n = values.cols();
     let val_it = values.counts().outer_iterator().nth(row_index).unwrap();
@@ -51,7 +50,7 @@ pub fn get_gearyc(
     weights: &sce::SingleCellExperiment<f32>,
     values: &sce::SingleCellExperiment<f32>,
     row_index: usize,
-    row_sums: &Vec<f32>,
+    row_sums: &[f32],
 ) -> Result<f32, Box<dyn Error>> {
     let n = values.cols();
     let val_it = values.counts().outer_iterator().nth(row_index).unwrap();
@@ -153,7 +152,7 @@ pub fn process(
             match out_data {
                 Some((index, stats)) => {
                     pbar.inc(1);
-                    write!(ofile, "{}\t{}\n", column_names[index], stats)
+                    writeln!(ofile, "{}\t{}", column_names[index], stats)
                         .expect("can't write to file");
                 } // end-Some
                 None => {
@@ -165,7 +164,7 @@ pub fn process(
                         for out_data in rx.iter() {
                             pbar.inc(1);
                             out_data.map_or((), |(index, stats)| {
-                                write!(ofile, "{}\t{}\n", column_names[index], stats)
+                                writeln!(ofile, "{}\t{}", column_names[index], stats)
                                     .expect("can't write to file");
                             });
                         }

@@ -10,7 +10,7 @@ pub struct Hmm {
     init: Vec<ProbT>,
     emission: Vec<Vec<ProbT>>,
     transition: Vec<Vec<ProbT>>,
-    num_assays: usize
+    num_assays: usize,
 }
 
 impl fmt::Debug for Hmm {
@@ -32,13 +32,9 @@ impl Hmm {
         self.transition[pstate][state]
     }
 
-    pub fn get_emission_prob(
-        &self,
-        state: usize,
-        observations: &Vec<ProbT>,
-    ) -> ProbT {
+    pub fn get_emission_prob(&self, state: usize, observations: &[ProbT]) -> ProbT {
         let mut id: usize = 0;
-        for (index, &observation) in observations.into_iter().enumerate() {
+        for (index, &observation) in observations.iter().enumerate() {
             if observation > THRESHOLDS[index] {
                 id |= 1 << index;
             }
@@ -129,7 +125,7 @@ impl Hmm {
                 }
             }
         }
-        
+
         Hmm {
             init,
             emission: all_emission,

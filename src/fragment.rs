@@ -13,8 +13,8 @@ pub struct Fragment {
 
 impl Fragment {
     pub fn from_pathbuf(filepath: PathBuf) -> Fragment {
-        let tbx_reader =
-            tbx::Reader::from_path(&filepath).expect(&format!("Could not open {:?}", filepath));
+        let tbx_reader = tbx::Reader::from_path(&filepath)
+            .unwrap_or_else(|_| panic!("Could not open {:?}", filepath));
 
         Fragment {
             _filepath: filepath,
@@ -56,21 +56,17 @@ impl Fragment {
         let mut cell_records: Vec<Vec<Record<ProbT>>> = vec![Vec::new(); num_common_cells];
         for record in all_records {
             let cb = record.id();
-            match assay_cells.get(&cb) {
-                Some(dict) => {
-                    for (&cell_id, &prob) in dict {
-                        let new_record = Record::new_with_id(&record.range(), prob);
-                        cell_records[cell_id as usize].push(new_record);
-                    }
+            if let Some(dict) = assay_cells.get(&cb) {
+                for (&cell_id, &prob) in dict {
+                    let new_record = Record::new_with_id(&record.range(), prob);
+                    cell_records[cell_id as usize].push(new_record);
                 }
-                None => (),
             };
         }
 
-        let cell_records: Vec<CellRecords<ProbT>> = cell_records
-            .into_iter()
-            .map(|x| CellRecords::new(x))
-            .collect();
-        return cell_records;
+        let cell_records: Vec<CellRecords<ProbT>> =
+            cell_records.into_iter().map(CellRecords::new).collect();
+
+        cell_records
     }
 }

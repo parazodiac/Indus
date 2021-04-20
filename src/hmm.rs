@@ -6,6 +6,7 @@ use crate::record::{AssayRecords, Experiment};
 
 use clap::ArgMatches;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -27,7 +28,7 @@ fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
 
 fn get_anchors(
     sub_m: &ArgMatches,
-    common_cells: &Vec<String>,
+    common_cells: &[String],
 ) -> Result<Vec<HashMap<u64, HashMap<u32, ProbT>>>, Box<dyn Error>> {
     // reading anchors
     let string_index_common_cells: HashMap<String, u32> = common_cells
@@ -51,7 +52,7 @@ fn get_anchors(
                 .get(toks[0])
                 .expect("can't find cell name in the common cell list");
 
-            let cb_str: Vec<&str> = toks[1].split("-").collect();
+            let cb_str: Vec<&str> = toks[1].split('-').collect();
             let cb_id = cb_str.get(1).unwrap().parse::<u8>().unwrap();
 
             let assay_cell_index: u64 =
@@ -60,7 +61,7 @@ fn get_anchors(
             let score = toks[2].parse::<ProbT>().unwrap();
             anchor_triplets
                 .entry(assay_cell_index)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(common_cell_index, score);
         }
 
@@ -97,7 +98,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     let fragment_file_paths = carina::file::files_path_from_clap(sub_m, "fragments")?;
     let mut frags: Vec<Fragment> = fragment_file_paths
         .into_iter()
-        .map(|x| Fragment::from_pathbuf(x))
+        .map(Fragment::from_pathbuf)
         .collect();
 
     let range = Range {
@@ -120,34 +121,48 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         })
         .collect();
     let exp = Experiment::new(assay_data);
-    let chr_lens = vec![
+    let _chr_lens = vec![
         248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973, 145138636,
         138394717, 133797422, 135086622, 133275309, 114364328, 107043718, 101991189, 90338345,
         83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
     ];
 
+    let chr_lens = vec![100_000, 100_000];
+    let num_chrs = chr_lens.len();
+    info!("Found total {} chromosomes", num_chrs);
+
     info!("Starting forward backward");
-    let pbar = ProgressBar::new(num_common_cells as u64);
-    pbar.set_style(
-        ProgressStyle::default_bar()
-            .template(
-                "{spinner:.red} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
-            )
-            .progress_chars("╢▌▌░╟"),
-    );
+    (0..num_chrs).into_iter().for_each(|chr_id| {
+        let chr_name = format!("chr{}", chr_id+1);
+        info!("Working on {}", chr_name);
 
-    let mut fprob = vec![vec![0.0; hmm.num_states()]; (chr_lens[0] / 200) + 1];
-    for cell_id in 0..num_common_cells {
-        pbar.inc(1);
-        let cell_data = exp.get_cell_data(cell_id);
-        let post_prob = quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob)?;
+        let pbar = ProgressBar::new(num_common_cells as u64);
+        pbar.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.red} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+                )
+                .progress_chars("╢▌▌░╟"),
+        );
 
-        //let out_path =
-        //    std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/posterior.mtx");
-        //sprs::io::write_matrix_market(out_path, &post_prob)?;
-    }
+        let cell_ids: Vec<usize> = (0..num_common_cells).collect();
+        let out_path =
+            std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/out").join(chr_name);
+        std::fs::create_dir_all(&out_path).unwrap();
 
-    pbar.finish();
+        cell_ids.par_iter().for_each(|&cell_id| {
+            pbar.inc(1);
+
+            let cell_data = exp.get_cell_data(cell_id);
+            let mut fprob = vec![vec![0.0; hmm.num_states()]; (chr_lens[0] / 200) + 1];
+            let post_prob =
+                quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob, chr_lens[chr_id]).unwrap();
+
+            let out_file = out_path.join(format!("{}.mtx", common_cells[cell_id]));
+            sprs::io::write_matrix_market(out_file, &post_prob).unwrap();
+        });
+        pbar.finish();
+    });
     info!("All Done");
 
     Ok(())

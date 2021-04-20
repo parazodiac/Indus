@@ -45,11 +45,11 @@ impl Record<u64> {
                 1 => start = text.parse::<u32>().unwrap(),
                 2 => end = text.parse::<u32>().unwrap(),
                 3 => {
-                    let toks: Vec<&str> = text.split("-").collect();
+                    let toks: Vec<&str> = text.split('-').collect();
                     cb = toks[0];
                     id = toks
                         .get(1)
-                        .expect(&format!("{:?}", toks.get(0)))
+                        .unwrap_or_else(|| panic!("{:?}", toks.get(0)))
                         .parse::<u8>()
                         .unwrap();
                 }

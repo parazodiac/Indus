@@ -7,11 +7,13 @@ use crate::record::{AssayRecords, Experiment};
 use clap::ArgMatches;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
+use sprs::indexing::SpIndex;
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::BufRead;
 use std::ops::Range;
+use std::io::Write;
 
 fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
     // reading in cell names of common assay.
@@ -101,40 +103,40 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         .map(Fragment::from_pathbuf)
         .collect();
 
-    let range = Range {
-        start: 0,
-        end: 250_000_000,
-    };
-    let tids: Vec<u64> = frags.iter().map(|x| x.tid("chr1")).collect();
-    let assay_data: Vec<AssayRecords<ProbT>> = frags
-        .iter_mut()
-        .enumerate()
-        .map(|(i, x)| {
-            let cell_records = x.fetch(
-                tids[i],
-                &range,
-                &vec_anchor_triplets.get(i).unwrap(),
-                num_common_cells,
-            );
-
-            AssayRecords::new(cell_records)
-        })
-        .collect();
-    let exp = Experiment::new(assay_data);
-    let _chr_lens = vec![
+    let chr_lens = vec![
         248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973, 145138636,
         138394717, 133797422, 135086622, 133275309, 114364328, 107043718, 101991189, 90338345,
         83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
     ];
 
-    let chr_lens = vec![100_000, 100_000];
     let num_chrs = chr_lens.len();
     info!("Found total {} chromosomes", num_chrs);
 
     info!("Starting forward backward");
-    (0..num_chrs).into_iter().for_each(|chr_id| {
+    (0..num_chrs).rev().for_each(|chr_id| {
         let chr_name = format!("chr{}", chr_id+1);
+        let tids: Vec<u64> = frags.iter().map(|x| x.tid(&chr_name)).collect();
         info!("Working on {}", chr_name);
+
+        let range = Range {
+            start: 0,
+            end: chr_lens[chr_id],
+        };
+        let assay_data: Vec<AssayRecords<ProbT>> = frags
+            .iter_mut()
+            .enumerate()
+            .map(|(i, x)| {
+                let cell_records = x.fetch(
+                    tids[i],
+                    &range,
+                    &vec_anchor_triplets.get(i).unwrap(),
+                    num_common_cells,
+                );
+
+                AssayRecords::new(cell_records)
+            })
+            .collect();
+        let exp = Experiment::new(assay_data);
 
         let pbar = ProgressBar::new(num_common_cells as u64);
         pbar.set_style(
@@ -147,23 +149,46 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
         let cell_ids: Vec<usize> = (0..num_common_cells).collect();
         let out_path =
-            std::path::Path::new("/home/srivastavaa/parazodiac/Indus/data/out").join(chr_name);
+            std::path::Path::new("/mnt/scratch1/avi/Indus/data/out").join(chr_name);
         std::fs::create_dir_all(&out_path).unwrap();
 
         cell_ids.par_iter().for_each(|&cell_id| {
             pbar.inc(1);
 
             let cell_data = exp.get_cell_data(cell_id);
-            let mut fprob = vec![vec![0.0; hmm.num_states()]; (chr_lens[0] / 200) + 1];
+            let mut fprob = vec![vec![0.0; hmm.num_states()]; (chr_lens[chr_id] as usize / 200) + 1];
             let post_prob =
-                quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob, chr_lens[chr_id]).unwrap();
+                quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob, chr_lens[chr_id] as usize).unwrap();
 
             let out_file = out_path.join(format!("{}.mtx", common_cells[cell_id]));
-            sprs::io::write_matrix_market(out_file, &post_prob).unwrap();
+            write_matrix_market(out_file, &post_prob).unwrap();
         });
         pbar.finish();
     });
     info!("All Done");
 
+    Ok(())
+}
+
+pub fn write_matrix_market(
+    path: std::path::PathBuf,
+    mat: &sprs::CsMat<ProbT>,
+) -> Result<(), Box<dyn Error>> {
+    let (rows, cols, nnz) = (mat.rows(), mat.cols(), mat.nnz());
+    let f = std::fs::File::create(path)?;
+    let mut writer = std::io::BufWriter::new(f);
+
+    writeln!(
+        writer,
+        "%%MatrixMarket matrix coordinate real general",
+    )?;
+
+    // dimensions and nnz
+    writeln!(writer, "{} {} {}", rows, cols, nnz)?;
+
+    // entries
+    for (val, (row, col)) in mat {
+        writeln!(writer, "{} {} {:.4}", row.index() + 1, col.index() + 1, val)?;
+    }
     Ok(())
 }

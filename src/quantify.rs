@@ -117,7 +117,8 @@ fn get_posterior(
     observations: Vec<Vec<ProbT>>,
     hmm: &Hmm,
     fprob: &mut Vec<Vec<ProbT>>,
-) -> Result<CsMat<ProbT>, Box<dyn Error>> {
+    posterior: &mut Vec<(usize, usize, ProbT)>,
+) -> Result<(), Box<dyn Error>> {
     let num_states = hmm.num_states();
     let num_assays = hmm.num_assays();
     let num_observations = observations.len();
@@ -125,7 +126,6 @@ fn get_posterior(
     assert!(num_assays == observations[0].len());
     let norm = forward(&observations, &hmm, fprob, num_states, num_observations)?;
 
-    let mut posterior = Vec::with_capacity(num_observations * num_states / 4);
     backward(
         observations,
         &hmm,
@@ -133,17 +133,12 @@ fn get_posterior(
         num_states,
         num_observations,
         fprob,
-        &mut posterior,
+        posterior,
     )?;
 
-    let mut mat = sprs::TriMat::new((num_observations, num_states));
-    posterior
-        .into_iter()
-        .for_each(|x| mat.add_triplet(x.0, x.1, x.2));
-    Ok(mat.to_csr())
+    Ok(())
 }
 
-#[inline]
 pub fn run_fwd_bkw(
     cell_records: Vec<&CellRecords<ProbT>>,
     hmm: &Hmm,
@@ -161,36 +156,48 @@ pub fn run_fwd_bkw(
         })
         .collect();
 
-    let observation_list: Vec<Vec<ProbT>> = (0..chr_len)
-        .step_by(WINDOW_SIZE)
-        .map(|qstart| {
-            let qrange = qstart as u32..(qstart + WINDOW_SIZE) as u32;
-            let cts: Vec<ProbT> = itrees
-                .iter()
-                .map(|tree| {
-                    let vals: Vec<ProbT> = tree.find(&qrange).map(|x| *x.data()).collect();
-                    vals.iter().sum()
-                })
-                .collect();
-            cts
-        })
-        .collect();
+    let get_obv_list = |start: usize, end: usize| {
+        let observation_list: Vec<Vec<ProbT>> = (start..end)
+            .step_by(WINDOW_SIZE)
+            .map(|qstart| {
+                let qrange = qstart as u32..(qstart + WINDOW_SIZE) as u32;
+                let cts: Vec<ProbT> = itrees
+                    .iter()
+                    .map(|tree| {
+                        let vals: Vec<ProbT> = tree.find(&qrange).map(|x| *x.data()).collect();
+                        vals.iter().sum()
+                    })
+                    .collect();
+                cts
+            })
+            .collect();
+        observation_list
+    };
 
-    let posterior = get_posterior(observation_list, hmm, fprob)?;
-    Ok(posterior)
+    let num_states = hmm.num_states();
+    let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
+
+    let mut posterior = Vec::with_capacity(100_000);
+    let observation_list = get_obv_list(0, chr_len);
+    get_posterior(observation_list, hmm, fprob, &mut posterior).unwrap();
+    for (x, y, z) in posterior.iter() {
+        mat.add_triplet(*x, *y, *z);
+    }
+
+    Ok(mat.to_csr())
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn test_fwd_bkw() {
-        let path =
-            std::path::PathBuf::from("/home/srivastavaa/parazodiac/Indus/data/model_test.txt");
+        let path = std::path::PathBuf::from("/mnt/scratch1/avi/Indus/data/model_test.txt");
         let file_reader = carina::file::bufreader_from_filepath(path).unwrap();
         let hmm = crate::model::Hmm::new(file_reader);
         let mut fprob = vec![vec![0.0; 2]; 3];
+        let mut post = Vec::new();
 
-        let mat = crate::quantify::get_posterior(
+        crate::quantify::get_posterior(
             vec![
                 vec![1.0, 0.0, 0.0],
                 vec![0.0, 1.0, 0.0],
@@ -198,14 +205,19 @@ mod tests {
             ],
             &hmm,
             &mut fprob,
+            &mut post,
         )
         .unwrap();
+        let mut mat = sprs::TriMat::new((3, 2));
+        post.into_iter()
+            .for_each(|(x, y, z)| mat.add_triplet(x, y, z));
         let probs: Vec<String> = mat
+            .to_csr::<usize>()
             .data()
             .into_iter()
             .map(|&x| format!("{:.4}", x))
             .collect();
-        println!("{:?}", mat.to_dense());
+
         assert_eq!(
             probs,
             ["0.9342", "0.0658", "0.6665", "0.3335", "0.1209", "0.8791"]
@@ -218,8 +230,9 @@ mod tests {
         let file_reader = carina::file::bufreader_from_filepath(path).unwrap();
         let hmm = crate::model::Hmm::new(file_reader);
         let mut fprob = vec![vec![0.0; 12]; 5];
+        let mut post = Vec::new();
 
-        let mat = crate::quantify::get_posterior(
+        crate::quantify::get_posterior(
             vec![
                 vec![1.0, 0.0, 0.0, 0.0, 0.0],
                 vec![1.0, 0.0, 0.0, 0.0, 0.0],
@@ -229,16 +242,16 @@ mod tests {
             ],
             &hmm,
             &mut fprob,
+            &mut post,
         )
         .unwrap();
 
-        let probs: Vec<String> = mat
-            .data()
+        let probs: Vec<String> = post
             .into_iter()
-            .map(|&x| format!("{:.4}", x))
+            .rev()
+            .map(|x| format!("{:.4}", x.2))
             .collect();
 
-        println!("{:?}", mat.to_dense());
         assert_eq!(
             probs,
             ["0.5616", "0.4384", "0.8942", "0.1058", "0.9050", "0.0950"]

@@ -2,12 +2,14 @@ use crate::config::ProbT;
 use crate::fragment::Fragment;
 use crate::model;
 use crate::quantify;
+use crate::config::{WINDOW_SIZE};
 use crate::record::{AssayRecords, Experiment};
 
 use clap::ArgMatches;
 use indicatif::{ProgressBar, ProgressStyle};
-use rayon::prelude::*;
 use sprs::indexing::SpIndex;
+use crossbeam::queue::ArrayQueue;
+use std::sync::{mpsc, Arc};
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -147,22 +149,73 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                 .progress_chars("╢▌▌░╟"),
         );
 
-        let cell_ids: Vec<usize> = (0..num_common_cells).collect();
         let out_path =
             std::path::Path::new("/mnt/scratch1/avi/Indus/data/out").join(chr_name);
         std::fs::create_dir_all(&out_path).unwrap();
 
-        cell_ids.par_iter().for_each(|&cell_id| {
-            pbar.inc(1);
+        let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
+        (0..num_common_cells).for_each(|x| q.push(x).unwrap());
 
-            let cell_data = exp.get_cell_data(cell_id);
-            let mut fprob = vec![vec![0.0; hmm.num_states()]; (chr_lens[chr_id] as usize / 200) + 1];
-            let post_prob =
-                quantify::run_fwd_bkw(cell_data, &hmm, &mut fprob, chr_lens[chr_id] as usize).unwrap();
+        let num_threads = 10;
+        let (tx, rx) = mpsc::sync_channel(num_threads);
 
-            let out_file = out_path.join(format!("{}.mtx", common_cells[cell_id]));
-            write_matrix_market(out_file, &post_prob).unwrap();
-        });
+        let arc_hmm = Arc::new(&hmm);
+        let arc_exp = Arc::new(&exp);
+        let arc_out_path = Arc::new(&out_path);
+        let arc_common_cells = Arc::new(&common_cells);
+
+        let num_states = hmm.num_states();
+        let chr_len = chr_lens[chr_id] as usize;
+        crossbeam::scope(|scope| {
+            for _ in 0..num_threads {
+                let tx = tx.clone();
+                let reader = Arc::clone(&q);
+                let arc_hmm = Arc::clone(&arc_hmm);
+                let arc_exp = Arc::clone(&arc_exp);
+                let arc_out_path = Arc::clone(&arc_out_path);
+                let arc_common_cells = Arc::clone(&arc_common_cells);
+
+                let mut posterior = Vec::with_capacity(chr_len * num_states / 400);
+                let mut fprob = vec![vec![0.0; arc_hmm.num_states()]; (chr_len / 200) + 1];
+                
+                scope.spawn(move |_| loop {
+                    match reader.pop() {
+                        Some(cell_id) => {
+                            posterior.clear();
+                            let cell_data = arc_exp.get_cell_data(cell_id);
+                            quantify::run_fwd_bkw(cell_data, &arc_hmm, &mut fprob, &mut posterior, chr_len).unwrap();
+
+                            let out_file = arc_out_path.join(format!("{}.mtx", arc_common_cells[cell_id]));
+                            let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
+                            for (x, y, z) in posterior.iter() {
+                                mat.add_triplet(*x, *y, *z);
+                            }
+                            tx.send(Some((mat, out_file)))
+                                .expect("Could not send mid data!");
+                        }
+                        None => {
+                            tx.send(None).expect("Could not send end data!");
+                            break;
+                        }
+                    }
+                });
+            }
+
+            for out_data in rx.iter() {
+                match out_data {
+                    Some((mat, out_file)) => {
+                        pbar.inc(1);
+
+                        write_matrix_market(out_file, &mat.to_csr()).unwrap();
+                    } // end-Some
+                    None => {
+                        break;
+                    } // end-None
+                } // end-match
+            } // end-for
+        })
+        .unwrap(); //end crossbeam
+
         pbar.finish();
     });
     info!("All Done");

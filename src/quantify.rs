@@ -1,5 +1,4 @@
 use bio::data_structures::interval_tree::IntervalTree;
-use sprs::CsMat;
 
 use crate::config::{ProbT, WINDOW_SIZE};
 use crate::model::Hmm;
@@ -55,13 +54,19 @@ fn update_triplet(
     norm: ProbT,
     fprob: &[Vec<ProbT>],
 ) {
+    let is_valid_state = |state: usize| match state {
+        //0 | 1 | 2 | 4 | 10 | 11 => true,
+        0 | 1 | 2 | 3 | 9 | 10  => true,
+        _ => false,
+    };
+
     let probs: Vec<ProbT> = (0..num_states)
         .map(|state| fprob[i][state] * b_curr[state] / norm)
         .collect();
     let state_norm: ProbT = probs.iter().sum();
     probs.into_iter().enumerate().for_each(|(state, prob)| {
         let prob = prob / state_norm;
-        if prob > 1e-4 {
+        if (prob > 1e-4) & is_valid_state(state) {
             posterior.push((i, state, prob))
         }
     });
@@ -112,7 +117,6 @@ fn backward(
     Ok(())
 }
 
-#[inline]
 fn get_posterior(
     observations: Vec<Vec<ProbT>>,
     hmm: &Hmm,
@@ -143,8 +147,9 @@ pub fn run_fwd_bkw(
     cell_records: Vec<&CellRecords<ProbT>>,
     hmm: &Hmm,
     fprob: &mut Vec<Vec<ProbT>>,
-    chr_len: usize,
-) -> Result<CsMat<ProbT>, Box<dyn Error>> {
+    posterior: &mut Vec<(usize, usize, ProbT)>,
+    chr_len: usize
+) -> Result<(), Box<dyn Error>> {
     let itrees: Vec<IntervalTree<u32, ProbT>> = cell_records
         .into_iter()
         .map(|cell_records| {
@@ -174,17 +179,10 @@ pub fn run_fwd_bkw(
         observation_list
     };
 
-    let num_states = hmm.num_states();
-    let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
-
-    let mut posterior = Vec::with_capacity(100_000);
     let observation_list = get_obv_list(0, chr_len);
-    get_posterior(observation_list, hmm, fprob, &mut posterior).unwrap();
-    for (x, y, z) in posterior.iter() {
-        mat.add_triplet(*x, *y, *z);
-    }
+    get_posterior(observation_list, hmm, fprob, posterior).unwrap();
 
-    Ok(mat.to_csr())
+    Ok(())
 }
 
 #[cfg(test)]

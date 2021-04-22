@@ -1,6 +1,6 @@
 use bio::data_structures::interval_tree::IntervalTree;
 
-use crate::config::{ProbT, WINDOW_SIZE};
+use crate::config::{ProbT, WINDOW_SIZE, MIN_PROB};
 use crate::model::Hmm;
 use crate::record::CellRecords;
 
@@ -57,6 +57,7 @@ fn update_triplet(
     let is_valid_state = |state: usize| match state {
         //0 | 1 | 2 | 4 | 10 | 11 => true,
         0 | 1 | 2 | 3 | 9 | 10  => true,
+        //0 | 1  => true,
         _ => false,
     };
 
@@ -66,7 +67,7 @@ fn update_triplet(
     let state_norm: ProbT = probs.iter().sum();
     probs.into_iter().enumerate().for_each(|(state, prob)| {
         let prob = prob / state_norm;
-        if (prob > 1e-4) & is_valid_state(state) {
+        if (prob > MIN_PROB) & is_valid_state(state) {
             posterior.push((i, state, prob))
         }
     });

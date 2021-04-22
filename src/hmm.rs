@@ -201,14 +201,25 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                 });
             }
 
+            let mut dead_thread_count = 0;
             for out_data in rx.iter() {
                 match out_data {
                     Some((mat, out_file)) => {
                         pbar.inc(1);
-
                         write_matrix_market(out_file, &mat.to_csr()).unwrap();
                     } // end-Some
                     None => {
+                        dead_thread_count += 1;
+                        if dead_thread_count == num_threads {
+                            drop(tx);
+
+                            for out_data in rx.iter() {
+                                pbar.inc(1);
+                                out_data.map_or((), |(mat, out_file)| {
+                                    write_matrix_market(out_file, &mat.to_csr()).unwrap();
+                                });
+                            }
+                        }
                         break;
                     } // end-None
                 } // end-match
@@ -241,7 +252,7 @@ pub fn write_matrix_market(
 
     // entries
     for (val, (row, col)) in mat {
-        writeln!(writer, "{} {} {:.4}", row.index() + 1, col.index() + 1, val)?;
+        writeln!(writer, "{} {} {:.2}", row.index() + 1, col.index() + 1, val)?;
     }
     Ok(())
 }

@@ -1,9 +1,9 @@
+use crate::config::ProbT;
+use crate::config::THRESHOLDS;
+use clap::ArgMatches;
 use std::error::Error;
 use std::fmt;
 use std::io::BufRead;
-use clap::ArgMatches;
-use crate::config::THRESHOLDS;
-use crate::config::ProbT;
 
 pub struct Hmm {
     init: Vec<ProbT>,

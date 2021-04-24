@@ -19,7 +19,7 @@ pub fn get_moransi(
     let val_it = values.counts().outer_iterator().nth(row_index).unwrap();
 
     let mut x_sum = 0.0;
-    let mut x = vec![0.0 as f32; n];
+    let mut x = vec![0.0_f32; n];
     for (col_ind, &val) in val_it.iter() {
         x_sum += val;
         x[col_ind] = val;
@@ -56,7 +56,7 @@ pub fn get_gearyc(
     let val_it = values.counts().outer_iterator().nth(row_index).unwrap();
 
     let mut x_sum = 0.0;
-    let mut x = vec![0.0 as f32; n];
+    let mut x = vec![0.0_f32; n];
     for (col_ind, &val) in val_it.iter() {
         x_sum += val;
         x[col_ind] = val;

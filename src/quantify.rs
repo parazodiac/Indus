@@ -1,6 +1,6 @@
 use bio::data_structures::interval_tree::IntervalTree;
 
-use crate::config::{ProbT, WINDOW_SIZE, MIN_PROB};
+use crate::config::{ProbT, MIN_PROB, WINDOW_SIZE};
 use crate::model::Hmm;
 use crate::record::CellRecords;
 
@@ -12,7 +12,7 @@ fn forward(
     fprob: &mut Vec<Vec<ProbT>>,
     num_states: usize,
     num_observations: usize,
-) -> Result<ProbT, Box<dyn Error>> {
+) -> ProbT {
     let mut f_prev: Vec<ProbT> = (0..num_states)
         .map(|state| hmm.get_emission_prob(state, &observations[0]) * hmm.get_init_prob(state))
         .collect();
@@ -42,7 +42,7 @@ fn forward(
         norm = 1.0;
     }
 
-    Ok(norm)
+    norm
 }
 
 #[inline]
@@ -56,7 +56,7 @@ fn update_triplet(
 ) {
     let is_valid_state = |state: usize| match state {
         //0 | 1 | 2 | 4 | 10 | 11 => true,
-        0 | 1 | 2 | 3 | 9 | 10  => true,
+        0 | 1 | 2 | 3 | 8 | 9 => true,
         //0 | 1  => true,
         _ => false,
     };
@@ -81,7 +81,7 @@ fn backward(
     num_observations: usize,
     fprob: &[Vec<ProbT>],
     posterior: &mut Vec<(usize, usize, ProbT)>,
-) -> Result<(), Box<dyn Error>> {
+) {
     let mut b_curr = vec![0.1; num_states];
     let mut b_prev = vec![0.1; num_states];
 
@@ -114,8 +114,6 @@ fn backward(
         b_prev.clone_from(&b_curr);
         update_triplet(i - 1, posterior, &b_curr, num_states, norm, fprob);
     }
-
-    Ok(())
 }
 
 fn get_posterior(
@@ -123,13 +121,13 @@ fn get_posterior(
     hmm: &Hmm,
     fprob: &mut Vec<Vec<ProbT>>,
     posterior: &mut Vec<(usize, usize, ProbT)>,
-) -> Result<(), Box<dyn Error>> {
+) {
     let num_states = hmm.num_states();
     let num_assays = hmm.num_assays();
     let num_observations = observations.len();
 
     assert!(num_assays == observations[0].len());
-    let norm = forward(&observations, &hmm, fprob, num_states, num_observations)?;
+    let norm = forward(&observations, &hmm, fprob, num_states, num_observations);
 
     backward(
         observations,
@@ -139,9 +137,7 @@ fn get_posterior(
         num_observations,
         fprob,
         posterior,
-    )?;
-
-    Ok(())
+    );
 }
 
 pub fn run_fwd_bkw(
@@ -149,7 +145,7 @@ pub fn run_fwd_bkw(
     hmm: &Hmm,
     fprob: &mut Vec<Vec<ProbT>>,
     posterior: &mut Vec<(usize, usize, ProbT)>,
-    chr_len: usize
+    chr_len: usize,
 ) -> Result<(), Box<dyn Error>> {
     let itrees: Vec<IntervalTree<u32, ProbT>> = cell_records
         .into_iter()
@@ -181,7 +177,7 @@ pub fn run_fwd_bkw(
     };
 
     let observation_list = get_obv_list(0, chr_len);
-    get_posterior(observation_list, hmm, fprob, posterior).unwrap();
+    get_posterior(observation_list, hmm, fprob, posterior);
 
     Ok(())
 }
@@ -205,8 +201,7 @@ mod tests {
             &hmm,
             &mut fprob,
             &mut post,
-        )
-        .unwrap();
+        );
         let mut mat = sprs::TriMat::new((3, 2));
         post.into_iter()
             .for_each(|(x, y, z)| mat.add_triplet(x, y, z));
@@ -242,8 +237,7 @@ mod tests {
             &hmm,
             &mut fprob,
             &mut post,
-        )
-        .unwrap();
+        );
 
         let probs: Vec<String> = post
             .into_iter()

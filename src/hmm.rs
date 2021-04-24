@@ -1,21 +1,24 @@
 use crate::config::ProbT;
+//use crate::config::WINDOW_SIZE;
 use crate::fragment::Fragment;
 use crate::model;
 use crate::quantify;
-use crate::config::{WINDOW_SIZE};
 use crate::record::{AssayRecords, Experiment};
 
 use clap::ArgMatches;
+use crossbeam::queue::ArrayQueue;
 use indicatif::{ProgressBar, ProgressStyle};
 use sprs::indexing::SpIndex;
-use crossbeam::queue::ArrayQueue;
 use std::sync::{mpsc, Arc};
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::BufRead;
-use std::ops::Range;
 use std::io::Write;
+use std::ops::Range;
+
+use flate2::write::GzEncoder;
+use flate2::Compression;
 
 fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
     // reading in cell names of common assay.
@@ -156,7 +159,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
         (0..num_common_cells).for_each(|x| q.push(x).unwrap());
 
-        let num_threads = 10;
+        let num_threads = 25;
         let (tx, rx) = mpsc::sync_channel(num_threads);
 
         let arc_hmm = Arc::new(&hmm);
@@ -177,7 +180,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
                 let mut posterior = Vec::with_capacity(chr_len * num_states / 400);
                 let mut fprob = vec![vec![0.0; arc_hmm.num_states()]; (chr_len / 200) + 1];
-                
+
                 scope.spawn(move |_| loop {
                     match reader.pop() {
                         Some(cell_id) => {
@@ -185,11 +188,23 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                             let cell_data = arc_exp.get_cell_data(cell_id);
                             quantify::run_fwd_bkw(cell_data, &arc_hmm, &mut fprob, &mut posterior, chr_len).unwrap();
 
-                            let out_file = arc_out_path.join(format!("{}.mtx", arc_common_cells[cell_id]));
-                            let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
+                            let out_file = arc_out_path.join(format!("{}.bin", arc_common_cells[cell_id]));
+                            let mut mat: Vec<u8> = Vec::with_capacity(posterior.len() * 6);
                             for (x, y, z) in posterior.iter() {
-                                mat.add_triplet(*x, *y, *z);
+                                let bytes = (*x as u32).to_le_bytes();
+                                mat.extend_from_slice(&bytes);
+
+                                let bytes = (*y as u8).to_le_bytes();
+                                mat.extend_from_slice(&bytes);
+
+                                let bytes = ((*z * 100.0) as u8).to_le_bytes();
+                                mat.extend_from_slice(&bytes);
                             }
+                            //let out_file = arc_out_path.join(format!("{}.mtx", arc_common_cells[cell_id]));
+                            //let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
+                            //for (x, y, z) in posterior.iter() {
+                            //    mat.add_triplet(*x, *y, *z);
+                            //}
                             tx.send(Some((mat, out_file)))
                                 .expect("Could not send mid data!");
                         }
@@ -206,7 +221,8 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                 match out_data {
                     Some((mat, out_file)) => {
                         pbar.inc(1);
-                        write_matrix_market(out_file, &mat.to_csr()).unwrap();
+                        write_binary(out_file, mat).unwrap();
+                        //write_matrix_market(out_file, &mat.to_csr()).unwrap();
                     } // end-Some
                     None => {
                         dead_thread_count += 1;
@@ -216,11 +232,13 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                             for out_data in rx.iter() {
                                 pbar.inc(1);
                                 out_data.map_or((), |(mat, out_file)| {
-                                    write_matrix_market(out_file, &mat.to_csr()).unwrap();
+                                    write_binary(out_file, mat).unwrap();
+                                    //write_matrix_market(out_file, &mat.to_csr()).unwrap();
                                 });
                             }
+
+                            break;
                         }
-                        break;
                     } // end-None
                 } // end-match
             } // end-for
@@ -234,6 +252,20 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+pub fn write_binary(
+    path: std::path::PathBuf,
+    mat: Vec<u8>,
+) -> Result<(), Box<dyn Error>> {
+    let f = std::fs::File::create(path)?;
+    //let mut file = GzEncoder::new(f, Compression::default());
+    let mut file = std::io::BufWriter::new(f);
+
+    // entries
+    file.write_all(&mat)?;
+
+    Ok(())
+}
+
 pub fn write_matrix_market(
     path: std::path::PathBuf,
     mat: &sprs::CsMat<ProbT>,
@@ -242,10 +274,7 @@ pub fn write_matrix_market(
     let f = std::fs::File::create(path)?;
     let mut writer = std::io::BufWriter::new(f);
 
-    writeln!(
-        writer,
-        "%%MatrixMarket matrix coordinate real general",
-    )?;
+    writeln!(writer, "%%MatrixMarket matrix coordinate real general",)?;
 
     // dimensions and nnz
     writeln!(writer, "{} {} {}", rows, cols, nnz)?;

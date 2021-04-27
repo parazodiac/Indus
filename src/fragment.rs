@@ -53,12 +53,21 @@ impl Fragment {
             .flatten()
             .collect();
 
+        let mut norm: HashMap<u32, u32> = HashMap::new();
+        for (_, val) in assay_cells {
+            for (cb, _) in val {
+                let ct = norm.entry(*cb).or_insert(0);
+                *ct += 1;
+            }
+        }
+
         let mut cell_records: Vec<Vec<Record<ProbT>>> = vec![Vec::new(); num_common_cells];
         for record in all_records {
             let cb = record.id();
             if let Some(dict) = assay_cells.get(&cb) {
                 for (&cell_id, &prob) in dict {
-                    let new_record = Record::new_with_id(&record.range(), prob);
+                    let nprob = prob / *norm.get(&cell_id).unwrap() as f32;
+                    let new_record = Record::new_with_id(&record.range(), nprob);
                     cell_records[cell_id as usize].push(new_record);
                 }
             };

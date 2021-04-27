@@ -1,9 +1,10 @@
 use crate::config::ProbT;
-//use crate::config::WINDOW_SIZE;
+use crate::config::WINDOW_SIZE;
 use crate::fragment::Fragment;
 use crate::model;
 use crate::quantify;
 use crate::record::{AssayRecords, Experiment};
+use bio::data_structures::interval_tree::IntervalTree;
 
 use clap::ArgMatches;
 use crossbeam::queue::ArrayQueue;
@@ -17,8 +18,8 @@ use std::io::BufRead;
 use std::io::Write;
 use std::ops::Range;
 
-use flate2::write::GzEncoder;
-use flate2::Compression;
+//use flate2::write::GzEncoder;
+//use flate2::Compression;
 
 fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
     // reading in cell names of common assay.
@@ -114,6 +115,10 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
     ];
 
+    //let chr_lens = vec![
+    //    210_000
+    //];
+
     let num_chrs = chr_lens.len();
     info!("Found total {} chromosomes", num_chrs);
 
@@ -152,99 +157,151 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                 .progress_chars("╢▌▌░╟"),
         );
 
-        let out_path =
-            std::path::Path::new("/mnt/scratch1/avi/Indus/data/out").join(chr_name);
-        std::fs::create_dir_all(&out_path).unwrap();
+        let only_imputed = true;
+        if only_imputed {
+            let mut files: Vec<std::io::BufWriter<std::fs::File>> = (0..num_assays).map(|id| {
+                let path = std::path::Path::new("/mnt/scratch1/avi/Indus/data/out").join(&chr_name).join(format!("{}.txt", id));
+                let f = std::fs::File::create(path).unwrap();
+                std::io::BufWriter::new(f)
+            }).collect();
 
-        let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
-        (0..num_common_cells).for_each(|x| q.push(x).unwrap());
-
-        let num_threads = 25;
-        let (tx, rx) = mpsc::sync_channel(num_threads);
-
-        let arc_hmm = Arc::new(&hmm);
-        let arc_exp = Arc::new(&exp);
-        let arc_out_path = Arc::new(&out_path);
-        let arc_common_cells = Arc::new(&common_cells);
-
-        let num_states = hmm.num_states();
-        let chr_len = chr_lens[chr_id] as usize;
-        crossbeam::scope(|scope| {
-            for _ in 0..num_threads {
-                let tx = tx.clone();
-                let reader = Arc::clone(&q);
-                let arc_hmm = Arc::clone(&arc_hmm);
-                let arc_exp = Arc::clone(&arc_exp);
-                let arc_out_path = Arc::clone(&arc_out_path);
-                let arc_common_cells = Arc::clone(&arc_common_cells);
-
-                let mut posterior = Vec::with_capacity(chr_len * num_states / 400);
-                let mut fprob = vec![vec![0.0; arc_hmm.num_states()]; (chr_len / 200) + 1];
-
-                scope.spawn(move |_| loop {
-                    match reader.pop() {
-                        Some(cell_id) => {
-                            posterior.clear();
-                            let cell_data = arc_exp.get_cell_data(cell_id);
-                            quantify::run_fwd_bkw(cell_data, &arc_hmm, &mut fprob, &mut posterior, chr_len).unwrap();
-
-                            let out_file = arc_out_path.join(format!("{}.bin", arc_common_cells[cell_id]));
-                            let mut mat: Vec<u8> = Vec::with_capacity(posterior.len() * 6);
-                            for (x, y, z) in posterior.iter() {
-                                let bytes = (*x as u32).to_le_bytes();
-                                mat.extend_from_slice(&bytes);
-
-                                let bytes = (*y as u8).to_le_bytes();
-                                mat.extend_from_slice(&bytes);
-
-                                let bytes = ((*z * 100.0) as u8).to_le_bytes();
-                                mat.extend_from_slice(&bytes);
-                            }
-                            //let out_file = arc_out_path.join(format!("{}.mtx", arc_common_cells[cell_id]));
-                            //let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
-                            //for (x, y, z) in posterior.iter() {
-                            //    mat.add_triplet(*x, *y, *z);
-                            //}
-                            tx.send(Some((mat, out_file)))
-                                .expect("Could not send mid data!");
+            (0..num_common_cells).for_each(|cell_id| {
+                pbar.inc(1);
+                let cell_data = exp.get_cell_data(cell_id);
+                let itrees: Vec<IntervalTree<u32, ProbT>> = cell_data
+                    .into_iter()
+                    .map(|cell_records| {
+                        let mut tree = IntervalTree::new();
+                        for record in cell_records.records() {
+                            tree.insert(record.range(), record.id());
                         }
+                        tree
+                    })
+                    .collect();
+
+                let get_obv_list = |start: usize, end: usize| {
+                    let observation_list: Vec<Vec<ProbT>> = (start..end)
+                        .step_by(WINDOW_SIZE)
+                        .map(|qstart| {
+                            let qrange = qstart as u32..(qstart + WINDOW_SIZE) as u32;
+                            let cts: Vec<ProbT> = itrees
+                                .iter()
+                                .map(|tree| {
+                                    let vals: Vec<ProbT> = tree.find(&qrange).map(|x| *x.data()).collect();
+                                    vals.iter().sum()
+                                })
+                                .collect();
+                            cts
+                        })
+                        .collect();
+                    observation_list
+                };
+
+                let observation_list = get_obv_list(0, chr_lens[chr_id] as usize);
+                for observation in observation_list {
+                    (0..observation.len()).for_each(|id| {
+                        if observation[id] != 0.0 {
+                            writeln!(files[id], "{:.8}", observation[id]).unwrap();
+                        }
+                    });
+                }
+            });
+        } else {
+            let out_path =
+                std::path::Path::new("/mnt/scratch1/avi/Indus/data/out").join(&chr_name);
+            std::fs::create_dir_all(&out_path).unwrap();
+
+            let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
+            (0..num_common_cells).for_each(|x| q.push(x).unwrap());
+
+            let num_threads = 25;
+            let (tx, rx) = mpsc::sync_channel(num_threads);
+
+            let arc_hmm = Arc::new(&hmm);
+            let arc_exp = Arc::new(&exp);
+            let arc_out_path = Arc::new(&out_path);
+            let arc_common_cells = Arc::new(&common_cells);
+
+            let num_states = hmm.num_states();
+            let chr_len = chr_lens[chr_id] as usize;
+            crossbeam::scope(|scope| {
+                for _ in 0..num_threads {
+                    let tx = tx.clone();
+                    let reader = Arc::clone(&q);
+                    let arc_hmm = Arc::clone(&arc_hmm);
+                    let arc_exp = Arc::clone(&arc_exp);
+                    let arc_out_path = Arc::clone(&arc_out_path);
+                    let arc_common_cells = Arc::clone(&arc_common_cells);
+
+                    let mut posterior = Vec::with_capacity(chr_len * num_states / 400);
+                    let mut fprob = vec![vec![0.0; arc_hmm.num_states()]; (chr_len / 200) + 1];
+
+                    scope.spawn(move |_| loop {
+                        match reader.pop() {
+                            Some(cell_id) => {
+                                posterior.clear();
+                                let cell_data = arc_exp.get_cell_data(cell_id);
+                                quantify::run_fwd_bkw(cell_data, &arc_hmm, &mut fprob, &mut posterior, chr_len).unwrap();
+
+                                let out_file = arc_out_path.join(format!("{}.bin", arc_common_cells[cell_id]));
+                                let num_posteriors = posterior.len();
+                                let mut bin_mat: Vec<u8> = vec![(
+                                    num_posteriors as u32).to_le_bytes(),
+                                    ((chr_len / 200 + 1) as u32).to_le_bytes(),
+                                    (num_states as u32).to_le_bytes()
+                                ].concat();
+
+                                let mut indices = posterior.iter().map(|x| (x.0 as u32).to_le_bytes()).collect::<Vec<[u8; 4]>>().concat();
+                                let mut state = posterior.iter().map(|x| (x.1 as u8).to_le_bytes()).collect::<Vec<[u8; 1]>>().concat();
+                                let mut value = posterior.iter().map(|x| ( (x.2 * 100.0) as u8).to_le_bytes()).collect::<Vec<[u8; 1]>>().concat();
+                                bin_mat.append(&mut value);
+                                bin_mat.append(&mut state);
+                                bin_mat.append(&mut indices);
+
+                                //let out_file = arc_out_path.join(format!("{}.mtx", arc_common_cells[cell_id]));
+                                //let mut mat = sprs::TriMat::new(((chr_len / WINDOW_SIZE) + 1, num_states));
+                                //for (x, y, z) in posterior.iter() {
+                                //    mat.add_triplet(*x, *y, *z);
+                                //}
+                                tx.send(Some((bin_mat, out_file)))
+                                    .expect("Could not send mid data!");
+                            }
+                            None => {
+                                tx.send(None).expect("Could not send end data!");
+                                break;
+                            }
+                        }
+                    });
+                }
+
+                let mut dead_thread_count = 0;
+                for out_data in rx.iter() {
+                    match out_data {
+                        Some((mat, out_file)) => {
+                            pbar.inc(1);
+                            write_binary(out_file, mat).unwrap();
+                            //write_matrix_market(out_file, &mat.to_csr()).unwrap();
+                        } // end-Some
                         None => {
-                            tx.send(None).expect("Could not send end data!");
-                            break;
-                        }
-                    }
-                });
-            }
+                            dead_thread_count += 1;
+                            if dead_thread_count == num_threads {
+                                drop(tx);
 
-            let mut dead_thread_count = 0;
-            for out_data in rx.iter() {
-                match out_data {
-                    Some((mat, out_file)) => {
-                        pbar.inc(1);
-                        write_binary(out_file, mat).unwrap();
-                        //write_matrix_market(out_file, &mat.to_csr()).unwrap();
-                    } // end-Some
-                    None => {
-                        dead_thread_count += 1;
-                        if dead_thread_count == num_threads {
-                            drop(tx);
-
-                            for out_data in rx.iter() {
-                                pbar.inc(1);
-                                out_data.map_or((), |(mat, out_file)| {
-                                    write_binary(out_file, mat).unwrap();
-                                    //write_matrix_market(out_file, &mat.to_csr()).unwrap();
-                                });
+                                for out_data in rx.iter() {
+                                    pbar.inc(1);
+                                    out_data.map_or((), |(mat, out_file)| {
+                                        write_binary(out_file, mat).unwrap();
+                                        //write_matrix_market(out_file, &mat.to_csr()).unwrap();
+                                    });
+                                }
+                                break;
                             }
-
-                            break;
-                        }
-                    } // end-None
-                } // end-match
-            } // end-for
-        })
-        .unwrap(); //end crossbeam
-
+                        } // end-None
+                    } // end-match
+                } // end-for
+            })
+            .unwrap(); //end crossbeam
+        }
         pbar.finish();
     });
     info!("All Done");
@@ -252,13 +309,11 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn write_binary(
-    path: std::path::PathBuf,
-    mat: Vec<u8>,
-) -> Result<(), Box<dyn Error>> {
+pub fn write_binary(path: std::path::PathBuf, mat: Vec<u8>) -> Result<(), Box<dyn Error>> {
     let f = std::fs::File::create(path)?;
     //let mut file = GzEncoder::new(f, Compression::default());
     let mut file = std::io::BufWriter::new(f);
+    //let mut file = std::io::BufWriter::new(snap::write::FrameEncoder::new(f));
 
     // entries
     file.write_all(&mat)?;

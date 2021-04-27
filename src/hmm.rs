@@ -157,7 +157,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                 .progress_chars("╢▌▌░╟"),
         );
 
-        let only_imputed = true;
+        let only_imputed = false;
         if only_imputed {
             let mut files: Vec<std::io::BufWriter<std::fs::File>> = (0..num_assays).map(|id| {
                 let path = std::path::Path::new("/mnt/scratch1/avi/Indus/data/out").join(&chr_name).join(format!("{}.txt", id));

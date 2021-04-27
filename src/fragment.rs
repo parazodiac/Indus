@@ -66,7 +66,7 @@ impl Fragment {
             let cb = record.id();
             if let Some(dict) = assay_cells.get(&cb) {
                 for (&cell_id, &prob) in dict {
-                    let nprob = prob / *norm.get(&cell_id).unwrap() as f32;
+                    let nprob = prob / *norm.get(&cell_id).unwrap() as ProbT;
                     let new_record = Record::new_with_id(&record.range(), nprob);
                     cell_records[cell_id as usize].push(new_record);
                 }

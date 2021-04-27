@@ -95,7 +95,7 @@ impl CellRecords<ProbT> {
 ////////////////////////////////////////////
 /// Assay Records
 ////////////////////////////////////////////
-
+#[derive(Debug)]
 pub struct AssayRecords<R> {
     records: Vec<CellRecords<R>>,
 }
@@ -113,7 +113,7 @@ impl AssayRecords<ProbT> {
 ////////////////////////////////////////////
 /// Experiment
 ////////////////////////////////////////////
-
+#[derive(Debug)]
 pub struct Experiment<ProbT> {
     records: Vec<AssayRecords<ProbT>>,
 }

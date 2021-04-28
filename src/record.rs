@@ -66,7 +66,11 @@ impl Record<u64> {
 
         match assay_cells.contains_key(&id) {
             true => {
-                let range = Range { start, end };
+                // 1-offset
+                let range = Range {
+                    start: start - 1,
+                    end: end - 1,
+                };
                 Some(Record { range, id })
             }
             false => None,

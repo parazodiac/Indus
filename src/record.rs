@@ -69,7 +69,7 @@ impl Record<u64> {
                 // 1-offset
                 let range = Range {
                     start: start - 1,
-                    end: end - 1,
+                    end: end,
                 };
                 Some(Record { range, id })
             }

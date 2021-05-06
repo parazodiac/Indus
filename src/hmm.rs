@@ -115,14 +115,11 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
     ];
 
-    //let chr_lens = vec![
-    //    210_000
-    //];
-
     let num_chrs = chr_lens.len();
     info!("Found total {} chromosomes", num_chrs);
 
     info!("Starting forward backward");
+    //(0..num_chrs).rev().take(1).for_each(|chr_id| {
     (0..num_chrs).rev().for_each(|chr_id| {
         let chr_name = format!("chr{}", chr_id+1);
         let tids: Vec<u64> = frags.iter().map(|x| x.tid(&chr_name)).collect();
@@ -212,6 +209,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
             std::fs::create_dir_all(&out_path).unwrap();
 
             let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
+            //(0..num_common_cells).filter(|&x| x == 2840).for_each(|x| q.push(x).unwrap());
             (0..num_common_cells).for_each(|x| q.push(x).unwrap());
 
             let num_threads = 25;
@@ -253,7 +251,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
                                 let mut indices = posterior.iter().map(|x| (x.0 as u32).to_le_bytes()).collect::<Vec<[u8; 4]>>().concat();
                                 let mut state = posterior.iter().map(|x| (x.1 as u8).to_le_bytes()).collect::<Vec<[u8; 1]>>().concat();
-                                let mut value = posterior.iter().map(|x| ( (x.2 * 100.0) as u8).to_le_bytes()).collect::<Vec<[u8; 1]>>().concat();
+                                let mut value = posterior.iter().map(|x| ( (x.2 * 100.0).round() as u8).to_le_bytes()).collect::<Vec<[u8; 1]>>().concat();
                                 bin_mat.append(&mut value);
                                 bin_mat.append(&mut state);
                                 bin_mat.append(&mut indices);

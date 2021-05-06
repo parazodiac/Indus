@@ -56,7 +56,7 @@ fn update_triplet(
 ) {
     let is_valid_state = |state: usize| match state {
         //0 | 1 | 2 | 4 | 10 | 11 => true,
-        0 | 1 | 2 | 3 | 8 | 9 => true,
+        0 | 1 | 2 | 3 | 8 | 9 | 11 => true,
         //0 | 1  => true,
         _ => false,
     };
@@ -162,7 +162,8 @@ pub fn run_fwd_bkw(
         let observation_list: Vec<Vec<ProbT>> = (start..end)
             .step_by(WINDOW_SIZE)
             .map(|qstart| {
-                let qrange = qstart as u32..(qstart + WINDOW_SIZE) as u32;
+                let qstart: usize = std::cmp::max(0, qstart as i32 - 1) as usize;
+                let qrange = qstart as u32..(qstart + WINDOW_SIZE + 1) as u32;
                 let cts: Vec<ProbT> = itrees
                     .iter()
                     .map(|tree| {
@@ -176,7 +177,24 @@ pub fn run_fwd_bkw(
         observation_list
     };
 
+    //let qstart = 132492 * 200;
+    //let qrange = qstart as u32 - 1..(qstart + WINDOW_SIZE) as u32;
+    //let cts: Vec<Vec<(u32, u32, f32)>> = itrees
+    //    .iter()
+    //    .map(|tree| {
+    //        let vals: Vec<(u32, u32, f32)> = tree.find(&qrange).map(|x| (x.interval().start, x.interval().end, *x.data())).collect();
+    //        vals
+    //    })
+    //    .collect();
+    //println!("{:?}", qrange);
+    //println!("{:?}", cts);
+
     let observation_list = get_obv_list(0, chr_len);
+    //println!("{:?}", observation_list[132491]);
+    //println!("{:?}", observation_list[132492]);
+    //println!("{:?}", observation_list[132493]);
+    //println!("{:?}", observation_list[132494]);
+
     get_posterior(observation_list, hmm, fprob, posterior);
 
     Ok(())

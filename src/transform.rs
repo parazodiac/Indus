@@ -20,6 +20,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     );
 
     let num_states = 12;
+    let num_threads = 4;
     let num_chrs = CHR_LENS.len();
     info!("Found total {} chromosomes", num_chrs);
 
@@ -30,7 +31,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     info!("Found output directory path: {:?}", out_path);
 
     info!("Starting to read");
-    (0..num_chrs).rev().for_each(|chr_id| {
+    (0..num_chrs).rev().take(1).for_each(|chr_id| {
         let chr_name = format!("chr{}", chr_id+1);
         info!("Working on {}", chr_name);
 
@@ -46,8 +47,6 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
         //(0..num_common_cells).filter(|&x| x == 2840).for_each(|x| q.push(x).unwrap());
         (0..num_common_cells).for_each(|x| q.push(x).unwrap());
-
-        let num_threads = 5;
         let (tx, rx) = mpsc::sync_channel(num_threads);
 
         let chr_path = in_path.join(&chr_name);
@@ -111,13 +110,20 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
             }).collect();
             let mut cell_id_handle = std::io::BufWriter::new(std::fs::File::create(chr_path.join(&"cells.txt")).unwrap());
 
+            let mut running_sums: Vec<u32> = vec![0; num_states];
+            let mut sizes: Vec<Vec<u32>> = vec![vec![0]; num_states];
+            let mut bin_probs: Vec<Vec<u8>> = vec![Vec::new(); num_states];
+            let mut bin_indices: Vec<Vec<u8>> = vec![Vec::new(); num_states];
             let mut dead_thread_count = 0;
             for out_data in rx.iter() {
                 match out_data {
-                    Some((state_indices, state_probs, cell_id)) => {
+                    Some((mut state_indices, mut state_probs, cell_id)) => {
                         for i in 0..num_states {
-                            file_handles[i].write_all(&state_probs[i]).unwrap();
-                            file_handles[i].write_all(&state_indices[i]).unwrap();
+                            running_sums[i] += state_probs[i].len() as u32;
+                            sizes[i].push(running_sums[i]);
+
+                            bin_probs[i].append(&mut state_probs[i]);
+                            bin_indices[i].append(&mut state_indices[i]);
                         }
                         writeln!(cell_id_handle, "{}", common_cells[cell_id]).unwrap();
                         pbar.inc(1);
@@ -131,6 +137,15 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                     } // end-None
                 } // end-match
             } // end-for
+
+            for i in 0..num_states {
+                file_handles[i].write_all(&(sizes[i].len() as u32).to_le_bytes()).unwrap();
+
+                let bin_sizes: Vec<u8> = sizes[i].iter().map(|x| x.to_le_bytes()).collect::<Vec<[u8; 4]>>().concat();
+                file_handles[i].write_all(&bin_sizes).unwrap();
+                file_handles[i].write_all(&bin_probs[i]).unwrap();
+                file_handles[i].write_all(&bin_indices[i]).unwrap();
+            }
         })
         .unwrap(); //end crossbeam
         pbar.finish();

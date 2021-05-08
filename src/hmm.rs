@@ -1,5 +1,5 @@
 use crate::config::ProbT;
-use crate::config::WINDOW_SIZE;
+use crate::config::{CHR_LENS, WINDOW_SIZE};
 use crate::fragment::Fragment;
 use crate::model;
 use crate::quantify;
@@ -21,7 +21,7 @@ use std::ops::Range;
 //use flate2::write::GzEncoder;
 //use flate2::Compression;
 
-fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
+pub fn get_cells(sub_m: &ArgMatches) -> Result<Vec<String>, Box<dyn Error>> {
     // reading in cell names of common assay.
     let cells_file_path = carina::file::file_path_from_clap(sub_m, "common_cells")?;
     let cells_reader = carina::file::bufreader_from_filepath(cells_file_path)?;
@@ -109,13 +109,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         .map(Fragment::from_pathbuf)
         .collect();
 
-    let chr_lens = vec![
-        248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973, 145138636,
-        138394717, 133797422, 135086622, 133275309, 114364328, 107043718, 101991189, 90338345,
-        83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
-    ];
-
-    let num_chrs = chr_lens.len();
+    let num_chrs = CHR_LENS.len();
     info!("Found total {} chromosomes", num_chrs);
 
     info!("Starting forward backward");
@@ -127,7 +121,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
 
         let range = Range {
             start: 0,
-            end: chr_lens[chr_id],
+            end: CHR_LENS[chr_id],
         };
         let assay_data: Vec<AssayRecords<ProbT>> = frags
             .iter_mut()
@@ -194,7 +188,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                     observation_list
                 };
 
-                let observation_list = get_obv_list(0, chr_lens[chr_id] as usize);
+                let observation_list = get_obv_list(0, CHR_LENS[chr_id] as usize);
                 for observation in observation_list {
                     (0..observation.len()).for_each(|id| {
                         if observation[id] != 0.0 {
@@ -221,7 +215,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
             let arc_common_cells = Arc::new(&common_cells);
 
             let num_states = hmm.num_states();
-            let chr_len = chr_lens[chr_id] as usize;
+            let chr_len = CHR_LENS[chr_id] as usize;
             crossbeam::scope(|scope| {
                 for _ in 0..num_threads {
                     let tx = tx.clone();

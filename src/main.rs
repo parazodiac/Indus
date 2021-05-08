@@ -11,6 +11,7 @@ mod model;
 mod quantify;
 mod record;
 mod spatial;
+mod transform;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("indus")
@@ -46,6 +47,34 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .required(true)
                         .multiple(true)
                         .help("path to the chromeHMM model.txt file"),
+                )
+                .arg(
+                    Arg::with_name("common_cells")
+                        .long("common_cells")
+                        .short("c")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the file with cellular barcodes of common assay."),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("transform")
+                .about("A subcommand to transform long form matrices to short.")
+                .arg(
+                    Arg::with_name("in_directory")
+                        .long("in_directory")
+                        .short("i")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the scChromHMM output directory"),
+                )
+                .arg(
+                    Arg::with_name("out_directory")
+                        .long("out_directory")
+                        .short("o")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the scChromHMM output directory"),
                 )
                 .arg(
                     Arg::with_name("common_cells")
@@ -97,6 +126,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(sub_m) = matches.subcommand_matches("hmm") {
         hmm::callback(&sub_m)?
+    }
+
+    if let Some(sub_m) = matches.subcommand_matches("transform") {
+        transform::callback(&sub_m)?
     }
 
     if let Some(sub_m) = matches.subcommand_matches("autocorr") {

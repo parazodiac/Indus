@@ -31,8 +31,9 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
     info!("Found output directory path: {:?}", out_path);
 
     info!("Starting to read");
-    (0..num_chrs).rev().take(1).for_each(|chr_id| {
+    (0..num_chrs).rev().for_each(|chr_id| {
         let chr_name = format!("chr{}", chr_id+1);
+        let num_bins = (CHR_LENS[chr_id] / 200) + 1;
         info!("Working on {}", chr_name);
 
         let pbar = ProgressBar::new(num_common_cells as u64);
@@ -45,7 +46,6 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         );
 
         let q = Arc::new(ArrayQueue::<usize>::new(num_common_cells));
-        //(0..num_common_cells).filter(|&x| x == 2840).for_each(|x| q.push(x).unwrap());
         (0..num_common_cells).for_each(|x| q.push(x).unwrap());
         let (tx, rx) = mpsc::sync_channel(num_threads);
 
@@ -82,9 +82,11 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
                             file_handle.read_exact(&mut states).expect("can't read states");
                             file_handle.read_exact(&mut indices).expect("can't read indices");
 
+                            let states_size = states.len();
                             let mut state_indices = vec![Vec::<u8>::new(); num_states];
                             let mut state_probs = vec![Vec::new(); num_states];
-                            for (idx, state) in states.into_iter().enumerate() {
+                            for (idx, state) in states.into_iter().rev().enumerate() {
+                                let idx = states_size - idx - 1;
                                 let state: usize = u8::from_le(state) as usize;
                                 state_probs[state].push(probs[idx]);
                                 state_indices[state].extend(&indices[idx*4..(idx+1)*4]);
@@ -139,6 +141,8 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
             } // end-for
 
             for i in 0..num_states {
+                if bin_probs[i].len() == 0 { continue; }
+                file_handles[i].write_all(&(num_bins as u32).to_le_bytes()).unwrap();
                 file_handles[i].write_all(&(sizes[i].len() as u32).to_le_bytes()).unwrap();
 
                 let bin_sizes: Vec<u8> = sizes[i].iter().map(|x| x.to_le_bytes()).collect::<Vec<[u8; 4]>>().concat();

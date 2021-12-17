@@ -1,6 +1,6 @@
 [package]
 name = "indus"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Avi Srivastava <asrivastava@cs.stonybrook.edu>"]
 edition = "2018"
 
@@ -12,8 +12,9 @@ log = "0.4.11"
 rand = "0.7.3"
 clap = "2.33.3"
 crossbeam = "0.8.0"
-indicatif = "0.15.0"
+indicatif = "0.16.2"
 pretty_env_logger = "0.4.0"
+granne = { version = "0.5.2", features = ["blas"] }
 
 [dependencies.carina]
 git = "https://github.com/parazodiac/Carina"

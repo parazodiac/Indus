@@ -18,6 +18,7 @@ mod configs;
 mod gibbs;
 mod links;
 mod multimodal;
+mod neighbor;
 mod spatial;
 mod unify;
 
@@ -52,6 +53,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .takes_value(true)
                         .required(true)
                         .possible_values(&["Moransi", "Gearyc"]),
+                )
+                .arg(
+                    Arg::with_name("output")
+                        .long("output")
+                        .short("o")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the output file."),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("neighbor")
+                .about("A subcommand to generate nearest neighbors.")
+                .arg(
+                    Arg::with_name("matrix")
+                        .long("matrix")
+                        .short("m")
+                        .takes_value(true)
+                        .required(true)
+                        .help("path to the matrix."),
                 )
                 .arg(
                     Arg::with_name("output")
@@ -114,6 +135,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(sub_m) = matches.subcommand_matches("autocorr") {
         spatial::callback(&sub_m)?
+    }
+
+    if let Some(sub_m) = matches.subcommand_matches("neighbor") {
+        neighbor::callback(&sub_m)?
     }
 
     Ok(())

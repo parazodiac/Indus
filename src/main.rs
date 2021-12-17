@@ -134,11 +134,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if let Some(sub_m) = matches.subcommand_matches("autocorr") {
-        spatial::callback(&sub_m)?
+        spatial::callback(&sub_m, 10)?
     }
 
     if let Some(sub_m) = matches.subcommand_matches("neighbor") {
-        neighbor::callback(&sub_m)?
+        neighbor::callback(&sub_m, 10)?
     }
 
     Ok(())

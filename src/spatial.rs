@@ -91,6 +91,7 @@ pub fn process(
     values: &sce::SingleCellExperiment<f32>,
     mut ofile: BufWriter<File>,
     is_moransi: bool,
+    num_threads: usize,
 ) -> Result<(), Box<dyn Error>> {
     let num_values = values.rows();
     let pbar = ProgressBar::new(num_values as u64);
@@ -115,7 +116,6 @@ pub fn process(
         })
         .collect();
 
-    let num_threads = 10;
     let q = Arc::new(ArrayQueue::<usize>::new(num_values));
     let arc_row_sums = Arc::new(row_sums);
     (0..num_values).for_each(|x| q.push(x).unwrap());
@@ -187,6 +187,7 @@ pub fn generate_stats(
     values_file_path: PathBuf,
     ofile: BufWriter<File>,
     method: Option<&str>,
+    num_threads: usize,
 ) -> Result<(), Box<dyn Error>> {
     let wt_mat: sce::SingleCellExperiment<f32> =
         sce::SingleCellExperiment::from_tenx_v2(weights_file_path)?;
@@ -199,11 +200,11 @@ pub fn generate_stats(
     match method {
         Some("Moransi") => {
             info!("Starting Moran's I");
-            process(&wt_mat, &val_mat, ofile, true)?;
+            process(&wt_mat, &val_mat, ofile, true, num_threads)?;
         }
         Some("Gearyc") => {
             info!("Starting Moran's I");
-            process(&wt_mat, &val_mat, ofile, false)?;
+            process(&wt_mat, &val_mat, ofile, false, num_threads)?;
         }
         _ => unreachable!(),
     };
@@ -211,7 +212,7 @@ pub fn generate_stats(
     Ok(())
 }
 
-pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
+pub fn callback(sub_m: &ArgMatches, num_threads: usize) -> Result<(), Box<dyn Error>> {
     let weights_file_path = carina::file::file_path_from_clap(sub_m, "weights")?;
     let values_file_path = carina::file::file_path_from_clap(sub_m, "values")?;
     let ofile = carina::file::bufwriter_from_clap(sub_m, "output")?;
@@ -221,6 +222,7 @@ pub fn callback(sub_m: &ArgMatches) -> Result<(), Box<dyn Error>> {
         values_file_path,
         ofile,
         sub_m.value_of("method"),
+        num_threads,
     )?;
 
     info!("All done");

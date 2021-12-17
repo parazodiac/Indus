@@ -65,11 +65,13 @@ pub fn generate_neighbors(
                     match reader.pop() {
                         Some(i) => {
                             let res = index.search(&index.get_element(i), 200, 20);
-                            let res: Vec<_> = res
-                                .into_iter()
-                                .map(|(idx, _dist)| idx.to_string())
-                                .collect();
+                            let mut indices: Vec<_> =
+                                res.iter().map(|(idx, _)| idx.to_string()).collect();
 
+                            let mut res: Vec<_> =
+                                res.into_iter().map(|(_, dist)| dist.to_string()).collect();
+
+                            res.append(&mut indices);
                             tx.send(Some(res)).expect("Could not send mid data!");
                         }
                         None => {
